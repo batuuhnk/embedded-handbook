@@ -1,8 +1,8 @@
 # 03 · Serial Protocols
 
-> How I choose between SPI, I²C, UART, RS-422/485 and CAN, based on topology, speed, distance and built-in error handling. MIL-STD-1553 has its [own chapter](04-mil-std-1553.md).
+> How I choose between SPI, I²C, UART and RS-422/485, based on topology, speed, distance and built-in error handling. MIL-STD-1553 has its [own chapter](04-mil-std-1553.md).
 
-**Contents:** [SPI](#spi) · [I²C](#ic) · [UART](#uart) · [RS-422 / RS-485](#rs-422--rs-485) · [CAN](#can) · [Comparison](#comparison) · [Typical trade-off questions](#typical-trade-off-questions)
+**Contents:** [SPI](#spi) · [I²C](#ic) · [UART](#uart) · [RS-422 / RS-485](#rs-422--rs-485) · [Comparison](#comparison) · [Typical trade-off questions](#typical-trade-off-questions)
 
 ---
 
@@ -64,19 +64,6 @@ Both carry UART-style framing over a **differential pair**. The receiver reads t
 
 ---
 
-## CAN
-
-**Shape:** multi-master, differential pair (CAN_H/CAN_L), **message-based**. Frames carry an identifier, not a destination address, and every node decides what to accept.
-
-- **Non-destructive bitwise arbitration.** When two nodes transmit at once, the lower ID (higher priority) wins and the other backs off automatically. No data is lost.
-- **Layered error handling in hardware:** CRC, ACK slot, bit stuffing, form checks, and error counters with bus-off for faulty nodes.
-- Classic CAN runs at up to 1 Mbit/s. CAN FD raises the data-phase rate and payload size.
-
-**I choose CAN** when many nodes in a noisy environment need reliable, prioritised messaging. Everything I would have to build myself on RS-485 (arbitration, error detection, fault confinement) is already in silicon.
-**I avoid it** for a simple point-to-point link, where the controller, transceiver and protocol stack are unnecessary overhead.
-
----
-
 ## Comparison
 
 | Protocol | Topology | Typical speed | Distance | Built-in error handling | My default use |
@@ -86,7 +73,6 @@ Both carry UART-style framing over a **differential pair**. The receiver reads t
 | **UART** | point-to-point | ≤ ~1 Mbit/s | short | parity (optional) | consoles, GNSS, bootloaders |
 | **RS-422** | point-to-point (1 → 10 RX) | up to ~10 Mbit/s | long | none | robust full-duplex 1:1 links |
 | **RS-485** | multi-drop | up to ~10 Mbit/s | long | none | polled field buses |
-| **CAN** | multi-master broadcast | ≤ 1 Mbit/s (classic) | medium | strong (CRC, ACK, error confinement) | reliable multi-node networks |
 | **MIL-STD-1553** | command/response, dual-redundant | 1 Mbit/s | aircraft-scale | strong ([chapter 04](04-mil-std-1553.md)) | avionics data buses |
 
 ---
@@ -96,13 +82,7 @@ Both carry UART-style framing over a **differential pair**. The receiver reads t
 **SPI or I²C?**
 SPI when speed matters and pins are available. I²C when there are many devices and pin or wiring count matters more than throughput.
 
-**RS-485 or CAN? Both are multi-drop.**
-RS-485 provides only the physical layer, so arbitration and error handling are my problem. CAN solves both in hardware. If reliability matters and the cost is acceptable, CAN is the stronger base.
-
 **Why RS-485 instead of UART?**
 Distance and noise immunity. Differential signalling survives long cables and electrically noisy platforms.
-
-**How does CAN arbitration work?**
-Dominant bits (0) override recessive bits (1) on the bus. Every transmitter reads the bus back while sending its ID. The first node to send recessive while reading dominant has lost, and it stops and retries later. The lowest ID always wins and its frame is not corrupted.
 
 [← Previous: RTOS & Concurrency](02-rtos-and-concurrency.md) · [Back to index](../README.md) · [Next: MIL-STD-1553 →](04-mil-std-1553.md)
