@@ -42,6 +42,7 @@
 **I choose it for** simple 1:1 links: GNSS modules, debug consoles, and **bootloaders**. A UART bootloader needs almost no hardware and works with any host.
 **I avoid it for** long cables or noisy environments. There I use the same framing over RS-422/485.
 
+> [!TIP]
 > **Practical tip:** receive with DMA + idle-line interrupt into a ring buffer, and parse frames in a task. That gives no per-byte interrupts and no lost bytes under load.
 
 ---
@@ -60,6 +61,7 @@ Both carry UART-style framing over a **differential pair**. The receiver reads t
 
 **Why not plain UART:** single-ended UART levels are only good for short, quiet links. Vehicles, aircraft and industrial sites need differential signalling.
 
+> [!WARNING]
 > **RS-485 gotcha:** the driver-enable (DE) line must be released *after the last stop bit has left the shift register* (transmission complete, not just TX-buffer empty). Otherwise the final byte gets cut off.
 
 ---

@@ -43,6 +43,7 @@ Two properties a semaphore lacks:
 1. **Ownership.** Only the task that took the mutex can release it.
 2. **Priority inheritance.** This bounds [priority inversion](#priority-inversion).
 
+> [!IMPORTANT]
 > **Rule:** protection → mutex, signalling → semaphore. A mutex can never be taken from an ISR, because it blocks and has an owner.
 
 ### Recursive mutex
@@ -90,19 +91,12 @@ A common pairing: take a pool block → fill it with a received packet → queue
 
 ## Decision flow
 
-```mermaid
-flowchart TD
-    A{Moving data?} -- yes --> Q[Queue<br/>+ memory pool for large items]
-    A -- no --> B{Waiting on a combination<br/>of independent events?}
-    B -- yes --> EF[Event flags]
-    B -- no --> C{Protecting a shared resource?}
-    C -- yes --> M[Mutex]
-    C -- no --> D{Must every occurrence<br/>be counted?}
-    D -- yes --> CS[Counting semaphore]
-    D -- no --> E{Exactly one receiving task?}
-    E -- yes --> TN[Task notification]
-    E -- no --> BS[Binary semaphore]
-```
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="../assets/diagrams/rtos-primitive-choice-dark.svg">
+    <img src="../assets/diagrams/rtos-primitive-choice.svg" alt="Choosing an RTOS primitive" width="660">
+  </picture>
+</p>
 
 Periodic or delayed work → **software timer**. Dynamic allocation → **memory pool**. I always start from the lightest primitive that does the job.
 

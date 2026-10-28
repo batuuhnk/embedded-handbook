@@ -40,13 +40,12 @@ Both must be calibrated out, or heading stays systematically wrong.
 
 The weaknesses are complementary. Sensor fusion keeps the **gyro's short-term accuracy** and uses the **accelerometer and magnetometer as long-term absolute references** to cancel the drift.
 
-```mermaid
-flowchart LR
-    G[Gyro<br/>angular rate] --> I[Integrate] --> F((Fusion))
-    A[Accelerometer<br/>gravity vector] --> RP[Roll / pitch<br/>reference] --> F
-    M[Magnetometer<br/>field vector] --> H[Heading<br/>reference] --> F
-    F --> O[Roll · Pitch · Yaw]
-```
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="../assets/diagrams/sensor-fusion-dark.svg">
+    <img src="../assets/diagrams/sensor-fusion.svg" alt="Gyro, accelerometer and magnetometer fused into roll, pitch and yaw" width="660">
+  </picture>
+</p>
 
 ---
 
@@ -65,6 +64,7 @@ flowchart LR
 1. **Predict** — propagate the state with the model (for example gyro integration) and grow the uncertainty.
 2. **Update** — compare the prediction with a new measurement; the difference (innovation) is blended in according to how much each side is trusted.
 
+> [!TIP]
 > On an embedded target, the integration work around the filter matters as much as the maths: fixed sample timing, consistent units and frames, sensible initialisation, and a way to log the internal states while tuning.
 
 ---
@@ -96,14 +96,12 @@ No sensor is accurate straight from the factory: manufacturing tolerances, tempe
 
 These products build on each other:
 
-```mermaid
-flowchart LR
-    DMC[Digital compass<br/>heading only] --> AHRS
-    INC[Inclinometer<br/>roll + pitch] --> AHRS
-    IMU[IMU<br/>raw 6/9-axis data] --> AHRS[AHRS<br/>roll + pitch + yaw]
-    AHRS --> INS[INS<br/>attitude + velocity + position]
-    GNSS[GNSS] --> INS
-```
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="../assets/diagrams/nav-hierarchy-dark.svg">
+    <img src="../assets/diagrams/nav-hierarchy.svg" alt="Navigation product hierarchy: compass, inclinometer, IMU, AHRS, INS" width="660">
+  </picture>
+</p>
 
 | System | Output | Main sensors | Limitation |
 |---|---|---|---|
@@ -113,6 +111,7 @@ flowchart LR
 | **AHRS** | full attitude: roll, pitch, yaw | IMU + magnetometer + fusion algorithm | no position |
 | **INS** | attitude, velocity, position | IMU + navigation algorithm, usually GNSS-aided | pure inertial position drifts quickly |
 
+> [!NOTE]
 > Common question: *"Does an IMU give attitude?"* — No. An IMU delivers raw inertial measurements; the attitude is computed by the AHRS layer on top.
 
 ---

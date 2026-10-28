@@ -16,6 +16,7 @@
 
 **What it does *not* do:** `volatile` gives no atomicity. A 32-bit (or larger) shared value can still be torn by an interrupt on some architectures, and read-modify-write sequences (`x++`) are never atomic. Shared data larger than a single naturally-aligned word needs a critical section or a mutex.
 
+> [!WARNING]
 > **Classic symptom:** works in Debug (`-O0`), fails in Release. Missing `volatile` on an ISR-shared variable is the first thing I check.
 
 ---

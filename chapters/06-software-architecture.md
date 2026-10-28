@@ -86,6 +86,15 @@ A consistent pattern for every module:
 3. **Persist** — log faults to non-volatile memory so they survive power loss and can be read back after a field event.
 4. **Report** — expose health in the status message so the system above can react.
 
+A typical built-in-test life cycle: a start-up test (BIT) with retries, then continuous monitoring (CIT) with an M-of-N window:
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="../assets/diagrams/bit-cit-states-dark.svg">
+    <img src="../assets/diagrams/bit-cit-states.svg" alt="BIT and CIT fault-management states" width="660">
+  </picture>
+</p>
+
 ---
 
 ## Patterns
@@ -105,14 +114,12 @@ Fixed-size blocks, constant-time allocation, no fragmentation — see [RTOS & Co
 
 Every component should be able to answer *"why does this exist?"* — a requirement ID, a change request or a recorded design decision. It costs a comment and saves hours for whoever modifies the code later.
 
-```mermaid
-flowchart LR
-    SR[System requirements] -.verified by.- ST[System test]
-    SD[Software design] -.verified by.- IT[Integration test]
-    DD[Detailed design] -.verified by.- UT[Unit test]
-    SR --> SD --> DD --> C[Code]
-    C --> UT --> IT --> ST
-```
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="../assets/diagrams/v-model-dark.svg">
+    <img src="../assets/diagrams/v-model.svg" alt="V-model: design phases and their matching test levels" width="660">
+  </picture>
+</p>
 
 A clean layered architecture maps directly onto the right-hand side: drivers are verified with hardware integration tests, the BSP against stubs, the application with logic tests. When layers are tangled, so are the test levels.
 
