@@ -1,14 +1,14 @@
-# 01 · Git & Code Review
+# 09 · Git & Code Review
 
 > Two people change the same file at the same time; one makes a mistake and the code ships. The real question: **before a change enters the main code, who looks at what, and how — and later, how do we answer "why is this line here?"** Git with a pull-request workflow is today's standard answer.
 
-**Contents:** [SVN to Git](#0--from-svn-to-git) · [Feature branch + PR](#1--example-adding-dma-to-a-uart) · [Change control in DO-178C](#2--how-a-change-moves-in-a-do-178c-project) · [Branch scenarios](#3--branch-scenarios) · [Good commits](#4--good-commits-good-prs) · [Commit conventions & deviations](#5--commit-conventions-and-recorded-deviations) · [Practice](#6--practice) · [Interview questions](#7--interview-questions) · [Principles](#principles)
+**Contents:** [From SVN to Git](#from-svn-to-git) · [Example: adding DMA to a UART](#example-adding-dma-to-a-uart) · [How a change moves in a DO-178C project](#how-a-change-moves-in-a-do-178c-project) · [Branch scenarios](#branch-scenarios) · [Good commits, good PRs](#good-commits-good-prs) · [Commit conventions and recorded deviations](#commit-conventions-and-recorded-deviations) · [Practice](#practice) · [Quick answers](#quick-answers) · [Principles](#principles)
 
 ---
 
-## 0 · From SVN to Git
+## From SVN to Git
 
-### 0.1 The difference in one sentence
+### The difference in one sentence
 
 In SVN the history lives **on the server**; committing means writing to the server. In Git every machine has a **complete repository**; a commit is local and `push` shares it.
 
@@ -30,7 +30,7 @@ svn commit        →  git commit (local)  +  git push (share)
 branches/ folder  →  git switch -c feature/x   (seconds, cheap)
 ```
 
-### 0.2 Concepts
+### Concepts
 
 | Concept | Meaning | Equivalent in a tracker-driven process |
 |---|---|---|
@@ -42,7 +42,7 @@ branches/ folder  →  git switch -c feature/x   (seconds, cheap)
 | code review | another engineer inspects and approves the PR | assigning reviewers to the SCR |
 | tag | permanent version label on a commit | baseline |
 
-### 0.3 What a pull request is
+### What a pull request is
 
 **PR = Pull Request:** "review the changes on my branch and, if they are fine, take them into main". The name comes from asking the maintainers to *pull* your changes. GitLab calls the same thing a **Merge Request (MR)**.
 
@@ -76,9 +76,9 @@ Without approval and passing checks, nothing enters main — so main stays relea
 
 ---
 
-## 1 · Example: adding DMA to a UART
+## Example: adding DMA to a UART
 
-### 1.1 First approach: commit straight to main
+### First approach: commit straight to main
 
 You move UART reception to DMA and push three commits straight to `main`. The second has a bug, and meanwhile a colleague wants to cut a release from `main`.
 
@@ -88,7 +88,7 @@ You move UART reception to DMA and push three commits straight to `main`. The se
 > - The bug entered the main line without anyone seeing it; there was no review.
 > - To undo it, your three commits are now interleaved with everyone else's.
 
-### 1.2 Solution: feature branch + PR
+### Solution: feature branch + PR
 
 <p align="center">
   <picture>
@@ -121,13 +121,13 @@ git tag -a v1.2.0 -m "release 1.2.0" && git push --tags
 
 ---
 
-## 2 · How a change moves in a DO-178C project
+## How a change moves in a DO-178C project
 
 In a certified project, changing a coding-standard rule or a line of code is not "open the file and fix it". A change request is opened in the issue tracker first, then the right people meet and decide. This section lays out that flow the way DO-178C expects it, and maps each step to GitHub.
 
-### 2.1 Why so many steps
+### Why so many steps
 
-In DO-178C, code, requirements, design and tests are under a **baseline** ([chapter 07](../chapters/07-do-178c.md)). When a line changes, these questions need answers backed by evidence:
+In DO-178C, code, requirements, design and tests are under a **baseline** ([chapter 07](07-do-178c.md)). When a line changes, these questions need answers backed by evidence:
 
 - **Why** was the change made? (problem report / change request)
 - **What** does it affect? (which requirement, design section, code, test)
@@ -137,7 +137,7 @@ In DO-178C, code, requirements, design and tests are under a **baseline** ([chap
 
 DO-178C requires this through the problem reporting, change control and change review objectives of the configuration-management process. The change request (SCR) is where these answers are collected.
 
-### 2.2 The flow as it should be
+### The flow as it should be
 
 <p align="center">
   <picture>
@@ -161,7 +161,7 @@ DO-178C requires this through the problem reporting, change control and change r
 > [!NOTE]
 > **Who sits in the meeting.** For a coding-standard change, the SCR is typically assigned to the engineers who researched the topic; comments collect in the ticket, the meeting decides if needed, the document moves to a new revision after approval, and the SCR closes linked to that revision. The table above is the same process written with DO-178C's role separation (CM, SQA, independent review).
 
-### 2.3 Example: SCR-142 — a new MISRA rule
+### Example: SCR-142 — a new MISRA rule
 
 | Step | In the tracker | On GitHub |
 |---|---|---|
@@ -209,11 +209,11 @@ Ignored error paths can cause silent data loss in the field.
 
 ---
 
-## 3 · Branch scenarios
+## Branch scenarios
 
-Git questions in interviews rarely ask "what is the command"; they describe a situation and ask what you would do. These are the common ones.
+Git problems rarely come as "what is the command"; they come as situations. These are the common ones.
 
-### 3.1 Main moved on while you were on your branch
+### Main moved on while you were on your branch
 
 <p align="center">
   <picture>
@@ -229,7 +229,7 @@ You branched `feature/imu-filter` from B and committed C and D. Meanwhile a coll
 | Situation | Result |
 |---|---|
 | Different files, or different parts of the same file | merged automatically; merge commit M is created |
-| The same lines changed | **conflict**, resolved by hand (3.2) |
+| The same lines changed | **conflict**, resolved by hand (next section) |
 
 > [!WARNING]
 > **Diagnosis — no conflict, but broken code (semantic conflict).** X changed the unit of `imu_read()` from m/s² to g; your filter still expects m/s². The lines differ, so Git says nothing and the merge looks "clean". It compiles, the tests pass (if they don't cover X), and the filter is off by a factor of 9.81. Or X changed a function signature and your new call no longer compiles. Git merges text, **not meaning**.
@@ -258,7 +258,7 @@ git push --force-with-lease    # only after a rebase, and only if the branch is 
 > [!TIP]
 > **Rule:** bring main into the branch before merging, test the combined result in CI, then merge. A semantic conflict is caught by **tests**, not by Git.
 
-### 3.2 Two people changed the same line — conflict
+### Two people changed the same line — conflict
 
 Git cannot know which one is right, so it writes both into the file:
 
@@ -275,7 +275,7 @@ Resolution: **decide** the correct value (ask the other change's author if neede
 > [!TIP]
 > **Fewer conflicts:** short-lived branches (a few days), bringing main into the branch often, small PRs. Merging a three-week branch is far harder than merging a one-day branch.
 
-### 3.3 The released version needs an urgent fix, but main has unfinished features
+### The released version needs an urgent fix, but main has unfinished features
 
 <p align="center">
   <picture>
@@ -296,7 +296,7 @@ git switch main && git merge hotfix/1.2.1     # or: git cherry-pick <fix-commit>
 > [!WARNING]
 > **The fix must also reach main.** If the hotfix stays only on the release branch, the next release (v1.3) brings the defect back (a regression). In DO-178C terms the fix affects both baselines, and both must be recorded against the SCR.
 
-### 3.4 A merged change causes a problem in the field
+### A merged change causes a problem in the field
 
 Main's history is never rewritten (no `reset`, no force-push). A **new commit** that reverses the change is created:
 
@@ -307,7 +307,7 @@ git revert -m 1 <merge-commit-hash>    # -m 1: keep the main-line side of the me
 > [!TIP]
 > **Reverting is also a change.** The revert goes through PR, review and CI too; in DO-178C it is a new SCR. Because nothing is deleted, "what happened and why it was reverted" stays traceable.
 
-### 3.5 You committed to main by mistake
+### You committed to main by mistake
 
 | Situation | What to do |
 |---|---|
@@ -315,7 +315,7 @@ git revert -m 1 <merge-commit-hash>    # -m 1: keep the main-line side of the me
 | Tried to push, main is protected | the push is rejected — that is what branch protection is for |
 | Pushed and others have pulled | don't rewrite history; undo with `git revert` |
 
-### 3.6 The branch has been open for weeks
+### The branch has been open for weeks
 
 > [!WARNING]
 > **Diagnosis — branch drift.** Main moves every day; the longer the branch lives, the higher the risk of conflicts and semantic conflicts, the bigger the review — and nobody really reviews a 3,000-line PR.
@@ -324,7 +324,7 @@ Remedies: split the feature into small parts merged through separate PRs; bring 
 
 ---
 
-## 4 · Good commits, good PRs
+## Good commits, good PRs
 
 | | Bad | Good |
 |---|---|---|
@@ -346,7 +346,7 @@ Tested: host test / measurement on the board.
 
 ---
 
-## 5 · Commit conventions and recorded deviations
+## Commit conventions and recorded deviations
 
 Teams that do not use Git can apply the same discipline. Two practices that carry over to any version-control system:
 
@@ -381,68 +381,28 @@ Teams that do not use Git can apply the same discipline. Two practices that carr
 
 ---
 
-## 6 · Practice
+## Practice
 
 1. Create a GitHub repository; add `build*/`, `*.o` and IDE files to `.gitignore`.
 2. Protect `main` (no direct push, PR required).
-3. Add the first feature with a feature branch + PR; review your own PR against the code-review table in [chapter 06](../chapters/06-software-architecture.md).
+3. Add the first feature with a feature branch + PR; review your own PR against the code-review table in [chapter 06](06-software-architecture.md).
 4. Change the same line on two branches on purpose and resolve the conflict.
 5. **Semantic-conflict experiment:** change a function's unit on one branch, add code that uses that function on another; merge both — Git reports no conflict; do your tests catch it?
-6. Add the PR template (§2.3); close a change through Issue → branch → PR → `Closes #n`.
+6. Add the PR template from the SCR-142 example; close a change through Issue → branch → PR → `Closes #n`.
 7. Tag `v0.1.0`; open `hotfix/0.1.1` from it and get the fix into both the tag and main.
 
 ---
 
-## 7 · Interview questions
+## Quick answers
 
-<details>
-<summary><b>Merge vs rebase?</b></summary>
-
-Merge joins two histories with a merge commit; history stays as it was. Rebase rewrites commits onto the tip of the target; history becomes linear. You don't rebase a branch others share, because it rewrites history.
-</details>
-
-<details>
-<summary><b>What do you look for in a code review?</b></summary>
-
-Correctness and error paths, ISR/RTOS rules, memory and bounds checks, readability, and whether there is a test. A full checklist is in [chapter 06](../chapters/06-software-architecture.md).
-</details>
-
-<details>
-<summary><b>How do you find which change introduced a field defect?</b></summary>
-
-Read the version and commit hash from the device, then binary-search between the good and bad versions with `git bisect`.
-</details>
-
-<details>
-<summary><b>How does a code change move through a DO-178C project?</b></summary>
-
-A change request is opened first: what, why, which artefacts are affected. Impact analysis follows, the right people (proposer, engineers who know the area, CM and SQA) meet and decide. The change is made in a separate working copy, reviewed with a checklist, affected tests are re-run, a new baseline is created and the SCR closes linked to that revision. On GitHub the equivalent is Issue → branch → PR (required reviewers + CI) → merge + tag.
-</details>
-
-<details>
-<summary><b>Main gained another feature after you branched. What happens when you merge?</b></summary>
-
-Git finds the common ancestor and does a three-way merge. Different lines merge automatically; the same lines conflict. The real risk is a semantic conflict with no textual conflict: if the other change altered the meaning of an interface, the code can build and still be wrong. So before merging I bring main into my branch (merge or rebase) and test the combined result in CI.
-</details>
-
-<details>
-<summary><b>How do you choose between merge and rebase?</b></summary>
-
-If the branch is shared, merge (history does not change). If it is mine alone and a linear history is wanted, rebase, then `--force-with-lease`. I never rewrite history on a shared branch or on main.
-</details>
-
-<details>
-<summary><b>The released version has an urgent defect, and main has unfinished features. What do you do?</b></summary>
-
-Branch from the release tag, fix and test, tag a new version, and bring the fix into main by merge or cherry-pick so the defect does not return in the next release.
-</details>
-
-<details>
-<summary><b>How do you undo a merged change?</b></summary>
-
-`git revert` creates a new commit that reverses it; main's history is not rewritten. The revert also goes through PR and CI.
-</details>
-
+- **Merge vs rebase?** Merge joins two histories with a merge commit; history stays as it was. Rebase rewrites commits onto the tip of the target; history becomes linear. You don't rebase a branch others share, because it rewrites history.
+- **What do you look for in a code review?** Correctness and error paths, ISR/RTOS rules, memory and bounds checks, readability, and whether there is a test. A full checklist is in [chapter 06](06-software-architecture.md).
+- **How do you find which change introduced a field defect?** Read the version and commit hash from the device, then binary-search between the good and bad versions with `git bisect`.
+- **How does a code change move through a DO-178C project?** A change request is opened first: what, why, which artefacts are affected. Impact analysis follows, the right people (proposer, engineers who know the area, CM and SQA) meet and decide. The change is made in a separate working copy, reviewed with a checklist, affected tests are re-run, a new baseline is created and the SCR closes linked to that revision. On GitHub the equivalent is Issue → branch → PR (required reviewers + CI) → merge + tag.
+- **Main gained another feature after you branched. What happens when you merge?** Git finds the common ancestor and does a three-way merge. Different lines merge automatically; the same lines conflict. The real risk is a semantic conflict with no textual conflict: if the other change altered the meaning of an interface, the code can build and still be wrong. So before merging I bring main into my branch (merge or rebase) and test the combined result in CI.
+- **How do you choose between merge and rebase?** If the branch is shared, merge (history does not change). If it is mine alone and a linear history is wanted, rebase, then `--force-with-lease`. I never rewrite history on a shared branch or on main.
+- **The released version has an urgent defect, and main has unfinished features. What do you do?** Branch from the release tag, fix and test, tag a new version, and bring the fix into main by merge or cherry-pick so the defect does not return in the next release.
+- **How do you undo a merged change?** `git revert` creates a new commit that reverses it; main's history is not rewritten. The revert also goes through PR and CI.
 ---
 
 ## Principles
@@ -461,3 +421,5 @@ No conflict does not mean correct; merged code is always tested.
 
 #### 5 — The tool carries the process; people make the decision
 A CCB decision and a PR approval both belong to people; the tool keeps a traceable record of them.
+
+[← Previous: Bare-metal, Hardware & Debug](08-bare-metal-and-debug.md) · [Back to index](../README.md) · [Next: Build System & Cross-Compile →](10-build-system-and-cross-compile.md)

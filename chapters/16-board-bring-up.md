@@ -1,12 +1,12 @@
-# 08 · Board Bring-up
+# 16 · Board Bring-up
 
 > A new board arrives from production; you flash the code and nothing happens. The question: **is it the hardware, the clock, the linker or the pin mux — and how do you tell, step by step, without guessing?** Bring-up is a ladder where each step relies on the one below having been verified.
 
-**Contents:** [The ladder](#0--the-ladder) · [Garbage on the UART](#1--example-garbage-on-the-uart) · [Typical symptoms](#2--typical-faults-and-their-symptoms) · [Checklist](#3--bring-up-checklist-for-a-new-board) · [Power-on self-test as a ladder](#4--the-power-on-self-test-as-a-bring-up-ladder) · [Practice](#5--practice) · [Interview questions](#6--interview-questions) · [Principles](#principles)
+**Contents:** [The ladder](#the-ladder) · [Example: garbage on the UART](#example-garbage-on-the-uart) · [Typical faults and their symptoms](#typical-faults-and-their-symptoms) · [Bring-up checklist for a new board](#bring-up-checklist-for-a-new-board) · [The power-on self-test as a bring-up ladder](#the-power-on-self-test-as-a-bring-up-ladder) · [Practice](#practice) · [Quick answers](#quick-answers) · [Principles](#principles)
 
 ---
 
-## 0 · The ladder
+## The ladder
 
 <p align="center">
   <picture>
@@ -33,18 +33,18 @@ Each step assumes the one below is correct. Garbled UART output is most likely n
 
 ---
 
-## 1 · Example: garbage on the UART
+## Example: garbage on the UART
 
 You power the board and the terminal shows `ÿ€ø` instead of `Hello`.
 
-### 1.1 First approach
+### First approach
 
 Look into the UART driver: baud calculation, parity, stop bits… hours of changing UART code.
 
 > [!WARNING]
 > **Diagnosis — wrong step.** The UART baud divider is computed **from the clock frequency**. The code assumes HSE = 8 MHz, the board has a 25 MHz crystal → every clock runs 25/8 times faster → the baud rate is off by the same factor. The UART code is fine; the step below is wrong.
 
-### 1.2 Solution: measure the step below
+### Solution: measure the step below
 
 **STM32F4: route SYSCLK to the MCO2 pin (PC9)**
 
@@ -62,7 +62,7 @@ On the oscilloscope you expect 168/4 = 42 MHz and see something far off → `HSE
 
 ---
 
-## 2 · Typical faults and their symptoms
+## Typical faults and their symptoms
 
 | Symptom | Likely cause | Step |
 |---|---|---|
@@ -79,7 +79,7 @@ On the oscilloscope you expect 168/4 = 42 MHz and see something far off → `HSE
 
 ---
 
-## 3 · Bring-up checklist for a new board
+## Bring-up checklist for a new board
 
 ```
 [ ] Supply voltages measured (every rail)
@@ -96,7 +96,7 @@ On the oscilloscope you expect 168/4 = 42 MHz and see something far off → `HSE
 
 ---
 
-## 4 · The power-on self-test as a bring-up ladder
+## The power-on self-test as a bring-up ladder
 
 In a product, the same ladder lives in software: `main()` calls one start-up function, and that function climbs the ladder on every boot. Each step sets a bit in a status word, so when a board comes up wrong, the status word read over the serial link tells you which step failed.
 
@@ -135,42 +135,27 @@ bool selftest_with_retry(int32_t (*step)(void), uint8_t max_tries, uint8_t fail_
 > [!TIP]
 > **When a new board revision arrives**
 > 1. Enable a one-time EEPROM smoke test (compile-time symbol) → confirm the EEPROM writes and reads back on a reserved scratch block, read the result over the serial link.
-> 2. Disable it and enable the full on-target test build → all tests pass ([05 §5](05-unit-test-static-analysis-coverage.md#5--on-target-tests-and-compile-time-gating)).
+> 2. Disable it and enable the full on-target test build → all tests pass ([chapter 13](13-unit-test-static-analysis-coverage.md#on-target-tests-and-compile-time-gating)).
 > 3. Disable both → release build; the status word must read 0.
 
 ---
 
-## 5 · Practice
+## Practice
 
-1. Map a register-level init sequence onto the table in §0.
+1. Map a register-level init sequence onto the ladder table at the top.
 2. Enable MCO on an STM32 and verify SYSCLK with an oscilloscope.
 3. Set `HSE_VALUE` wrong on purpose; watch the UART output break and diagnose it with MCO.
 4. Write the smallest test that reads the board sensor's WHO_AM_I register.
 
-**Related:** [chapter 08](../chapters/08-bare-metal-and-debug.md) (clock tree, PLL, watchdog), [09](09-gdb-and-fault-analysis.md).
+**Related:** [chapter 08](08-bare-metal-and-debug.md) (clock tree, PLL, watchdog), [chapter 17](17-gdb-and-fault-analysis.md).
 
 ---
 
-## 6 · Interview questions
+## Quick answers
 
-<details>
-<summary><b>A new board arrives. What do you do first?</b></summary>
-
-Measure power and reset, connect the debugger to the core, verify the clock with MCO, then bring up the LED and the UART console; then go through the peripherals one by one.
-</details>
-
-<details>
-<summary><b>The code doesn't run and the debugger won't connect either.</b></summary>
-
-Supply and reset, SWD pins reassigned to another function, boot pins, low-power modes; if needed, "connect under reset".
-</details>
-
-<details>
-<summary><b>The UART prints garbage.</b></summary>
-
-Clock first: measure SYSCLK on MCO, check the HSE definition. If the clock is right, check the baud calculation and the other side's settings.
-</details>
-
+- **A new board arrives. What do you do first?** Measure power and reset, connect the debugger to the core, verify the clock with MCO, then bring up the LED and the UART console; then go through the peripherals one by one.
+- **The code doesn't run and the debugger won't connect either.** Supply and reset, SWD pins reassigned to another function, boot pins, low-power modes; if needed, "connect under reset".
+- **The UART prints garbage.** Clock first: measure SYSCLK on MCO, check the HSE definition. If the clock is right, check the baud calculation and the other side's settings.
 ---
 
 ## Principles
@@ -183,3 +168,5 @@ MCO, an oscilloscope and a logic analyzer are faster than hours of code changes.
 
 #### 3 — The symptom is up, the cause is down
 Garbled UART is usually the clock; an unexplained fault is usually wait states or the linker.
+
+[← Previous: Atomics & Memory Barriers](15-atomics-and-memory-barriers.md) · [Back to index](../README.md) · [Next: GDB & Fault Analysis →](17-gdb-and-fault-analysis.md)

@@ -1,9 +1,6 @@
 # Embedded Systems Handbook
 
-Practical notes on embedded firmware for real-time and safety-critical systems, in two parts:
-
-- **[Chapters](#chapters)** — what an embedded engineer must *know*. For every topic: **what it is, when to choose it over the alternatives, and what goes wrong**.
-- **[Roadmap](#roadmap)** — the chain *around* the code that modern firmware teams expect: review, build, CI, testing, and measuring real-time behaviour instead of assuming it.
+Practical notes on embedded firmware for real-time and safety-critical systems. Each chapter answers the same questions for its topic: **what it is, when to choose it over the alternatives, and what goes wrong**.
 
 The notes are written from general engineering knowledge and public standards. They describe no specific product, customer or employer.
 
@@ -19,46 +16,35 @@ The notes are written from general engineering knowledge and public standards. T
 | 06 | [Software Architecture](chapters/06-software-architecture.md) | layering, portability, state machines, fault management, patterns, V-model |
 | 07 | [DO-178C](chapters/07-do-178c.md) | software levels, processes, traceability, verification, MC/DC, SOI audits |
 | 08 | [Bare-metal, Hardware & Debug](chapters/08-bare-metal-and-debug.md) | super loop, registers, NVIC, DMA, watchdog, bootloader, clocks, SWD/JTAG, HardFault |
-
-## Roadmap
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/diagrams/roadmap-loop-dark.svg">
-    <img src="assets/diagrams/roadmap-loop.svg" alt="Learning loop: roadmap note, project, handbook chapter, interview" width="660">
-  </picture>
-</p>
-
-| Layer | # | Note | Covers |
-|---|---|---|---|
-| Development chain | 01 | [Git & Code Review](roadmap/01-git-and-code-review.md) | PR workflow, merge/rebase scenarios, hotfixes, change control in DO-178C projects |
-| | 02 | [Build System & Cross-Compile](roadmap/02-build-system-and-cross-compile.md) | build chain, Make vs CMake, toolchain files, linker script, `.map` file, bootloader offsets |
-| | 03 | [CI/CD & Docker](roadmap/03-ci-cd-and-docker.md) | firmware pipeline, traceability, pinned toolchains, hardware-in-the-loop CI, retrofitting CI to IDE + SVN projects |
-| | 04 | [Python & Bash Automation](roadmap/04-python-and-bash-automation.md) | talking to firmware over UART, exit codes, command interpreters, data capture |
-| | 05 | [Unit Test, Static Analysis & Coverage](roadmap/05-unit-test-static-analysis-coverage.md) | testable design, Unity, cppcheck, branch coverage, on-target test gating |
-| Depth | 06 | [Real-time Metrics](roadmap/06-real-time-metrics.md) | latency, jitter, WCET, schedulability, measuring with GPIO/DWT |
-| | 07 | [Atomics & Memory Barriers](roadmap/07-atomics-and-memory-barriers.md) | lost updates, critical sections, LDREX/STREX, DMB/DSB/ISB |
-| | 08 | [Board Bring-up](roadmap/08-board-bring-up.md) | bring-up ladder, typical symptoms, checklist, power-on self-test |
-| | 09 | [GDB & Fault Analysis](roadmap/09-gdb-and-fault-analysis.md) | GDB chain, watchpoints, HardFault decoding, reset causes, watchdog manager |
-| Role-specific | 10 | [Firmware Update & Secure Boot](roadmap/10-firmware-update-and-secure-boot.md) | A/B updates, integrity vs authenticity, rollback, redundant boot records |
-| | 11 | [Motor Control](roadmap/11-motor-control.md) | PWM, PI with anti-windup, cascaded loops, 6-step vs FOC |
-
-Every roadmap note follows the same shape: **the question → basics → a failing first approach → the fix → practice → interview questions → principles.** Start from the [roadmap overview](roadmap/README.md).
+| 09 | [Git & Code Review](chapters/09-git-and-code-review.md) | PR workflow, merge/rebase scenarios, hotfixes, change control in DO-178C projects |
+| 10 | [Build System & Cross-Compile](chapters/10-build-system-and-cross-compile.md) | build chain, Make vs CMake, toolchain files, linker script, `.map` file, bootloader offsets |
+| 11 | [CI/CD & Docker](chapters/11-ci-cd-and-docker.md) | firmware pipeline, traceability, pinned toolchains, hardware-in-the-loop CI, CI for IDE + SVN projects |
+| 12 | [Python & Bash Automation](chapters/12-python-and-bash-automation.md) | talking to firmware over UART, exit codes, command interpreters, data capture |
+| 13 | [Unit Test, Static Analysis & Coverage](chapters/13-unit-test-static-analysis-coverage.md) | testable design, Unity, cppcheck, branch coverage, on-target test gating |
+| 14 | [Real-time Metrics](chapters/14-real-time-metrics.md) | latency, jitter, WCET, schedulability, measuring with GPIO/DWT |
+| 15 | [Atomics & Memory Barriers](chapters/15-atomics-and-memory-barriers.md) | lost updates, critical sections, LDREX/STREX, DMB/DSB/ISB |
+| 16 | [Board Bring-up](chapters/16-board-bring-up.md) | bring-up ladder, typical symptoms, checklist, power-on self-test |
+| 17 | [GDB & Fault Analysis](chapters/17-gdb-and-fault-analysis.md) | GDB chain, watchpoints, HardFault decoding, reset causes, watchdog manager |
+| 18 | [Firmware Update & Secure Boot](chapters/18-firmware-update-and-secure-boot.md) | A/B updates, integrity vs authenticity, rollback, redundant boot records |
+| 19 | [Motor Control](chapters/19-motor-control.md) | PWM, PI with anti-windup, cascaded loops, 6-step vs FOC |
 
 ## How to read it
 
 ```mermaid
 flowchart LR
     C[01 Embedded C] --> R[02 RTOS]
-    R --> P[03 Serial protocols] --> M[04 MIL-STD-1553]
-    R --> S[05 Sensors & navigation]
-    R --> A[06 Architecture] --> D[07 DO-178C]
     C --> B[08 Bare-metal & debug]
-    B --> RM[Roadmap 01–11]
-    A --> RM
+    R --> P[03 Serial protocols] --> M[04 MIL-STD-1553]
+    R --> S[05 Sensors & navigation] --> MC[19 Motor control]
+    R --> A[06 Architecture] --> D[07 DO-178C]
+    R --> RT[14 Real-time metrics] --> AT[15 Atomics]
+    B --> BU[16 Bring-up] --> G[17 GDB & faults] --> FU[18 Firmware update]
+    A --> GIT[09 Git] --> BLD[10 Build] --> CI[11 CI/CD]
+    BLD --> PY[12 Automation] --> CI
+    BLD --> T[13 Testing] --> CI
 ```
 
-Chapters stand alone, but the order above goes from language to system level. Most chapters end with a **Quick answers** list for revision; every roadmap note ends with **Interview questions**.
+Chapters stand alone; the graph shows which ones build on which. Most chapters end with a **Quick answers** list for revision.
 
 ## Conventions
 

@@ -1,12 +1,12 @@
-# 09 · GDB & Fault Analysis
+# 17 · GDB & Fault Analysis
 
 > The device resets once a day in the field and never in the lab. The question: **in a system where you cannot see the moment of failure, how do you find where and why it fails?** The answer has three parts: using the debugger without the IDE, reading the trace the CPU leaves at the moment of a fault, and having the device record its own reset causes.
 
-**Contents:** [The debugger chain](#0--the-debugger-chain) · [A variable that randomly corrupts](#1--example-a-variable-that-randomly-corrupts) · [HardFault](#2--decoding-a-hardfault) · [In the field](#3--in-the-field-reset-cause-and-stack-overflow) · [Watchdog manager and boot-loop detection](#4--watchdog-manager-reset-cause-latch-and-boot-loop-detection) · [Practice](#5--practice) · [Interview questions](#6--interview-questions) · [Principles](#principles)
+**Contents:** [The debugger chain](#the-debugger-chain) · [Example: a variable that randomly corrupts](#example-a-variable-that-randomly-corrupts) · [Decoding a HardFault](#decoding-a-hardfault) · [In the field: reset cause and stack overflow](#in-the-field-reset-cause-and-stack-overflow) · [Watchdog manager, reset-cause latch and boot-loop detection](#watchdog-manager-reset-cause-latch-and-boot-loop-detection) · [Practice](#practice) · [Quick answers](#quick-answers) · [Principles](#principles)
 
 ---
 
-## 0 · The debugger chain
+## The debugger chain
 
 When you press "Debug" in the IDE, this chain runs behind it:
 
@@ -55,18 +55,18 @@ arm-none-eabi-gdb build-arm/app.elf
 
 ---
 
-## 1 · Example: a variable that randomly corrupts
+## Example: a variable that randomly corrupts
 
 `imu_scale` turns into a nonsense value now and then. The only code that writes it is `imu_init()`.
 
-### 1.1 First approach
+### First approach
 
 Add `printf`s and watch the value; rebuild and reflash for every attempt.
 
 > [!WARNING]
 > **Diagnosis — why you can't find it.** **Your code** isn't writing the variable; a neighbouring buffer overflows into it. `printf` changes the timing, so the bug sometimes even disappears. Without seeing who writes, you spend hours looking at the wrong function.
 
-### 1.2 Solution: a watchpoint
+### Solution: a watchpoint
 
 ```gdb
 (gdb) watch imu_scale
@@ -83,9 +83,9 @@ $1 = 64
 The `.map` shows `imu_scale` right after `rx_buf[64]`: `rx_idx` has no bounds check, and the 65th byte lands in the neighbouring variable.
 
 > [!TIP]
-> **Result.** Two commands caught the writer: a missing bounds check in the UART ISR. Rule: "a variable gets corrupted" → watchpoint + neighbours in the `.map` ([02 §3.4](02-build-system-and-cross-compile.md#34-which-symbols-are-listed-and-which-are-not)).
+> **Result.** Two commands caught the writer: a missing bounds check in the UART ISR. Rule: "a variable gets corrupted" → watchpoint + neighbours in the `.map` ([chapter 10](10-build-system-and-cross-compile.md#which-symbols-are-listed-and-which-are-not)).
 
-### 1.3 Watchpoints in STM32CubeIDE
+### Watchpoints in STM32CubeIDE
 
 | Way | How | When |
 |---|---|---|
@@ -110,7 +110,7 @@ When it stops, the call stack in the **Debug** view shows the writing function; 
 
 ---
 
-## 2 · Decoding a HardFault
+## Decoding a HardFault
 
 On a fault, Cortex-M automatically pushes eight registers onto the stack:
 
@@ -173,7 +173,7 @@ arm-none-eabi-addr2line -e build-arm/app.elf -f 0x08001a52
 
 ---
 
-## 3 · In the field: reset cause and stack overflow
+## In the field: reset cause and stack overflow
 
 **Read the reset cause at boot (STM32F4)**
 
@@ -192,7 +192,7 @@ fault_log_reset(cause);
 
 | Reset cause | What it suggests |
 |---|---|
-| IWDG | a task missed its check-in → which task? (feed per task, §4) |
+| IWDG | a task missed its check-in → which task? (feed per task, see the watchdog manager below) |
 | Software | `NVIC_SystemReset` from the HardFault handler → check the fault log |
 | Brown-out | supply dips → hardware, peak current |
 | Pin | external reset, EMI |
@@ -215,11 +215,11 @@ UBaseType_t left = uxTaskGetStackHighWaterMark(NULL);
 
 ---
 
-## 4 · Watchdog manager, reset-cause latch and boot-loop detection
+## Watchdog manager, reset-cause latch and boot-loop detection
 
 The principle "a device in the field must tell its own story" in three concrete pieces:
 
-### 4.1 Watchdog manager: which task is stuck
+### Watchdog manager: which task is stuck
 
 <p align="center">
   <picture>
@@ -240,7 +240,7 @@ if (wdg_wait_all_healthy(WDG_CHECK_PERIOD_MS)) { /* osFlagsWaitAll */
 
 Feeding from a single task only proves "at least one task runs". Here the IWDG is refreshed only if **every** task checked in within the period; if one hangs, refreshing stops and the hardware resets after its timeout.
 
-### 4.2 Reset cause: a per-boot latch
+### Reset cause: a per-boot latch
 
 ```c
 /* first step of the self-test — even before non-volatile memory is up */
@@ -255,7 +255,7 @@ clear_reset_flags();                    /* last — keeps this boot's cause in t
 > [!WARNING]
 > **Diagnosis — clearing the flags too early.** If the reset flags are never cleared, the next boot reads the old cause again; if they are cleared at the start of the self-test, the cause of this boot can be lost. Read first, clear after the self-test: the status bit holds the cause of *this* boot.
 
-### 4.3 Boot-loop detection: count in EEPROM, not RAM
+### Boot-loop detection: count in EEPROM, not RAM
 
 The status word lives in RAM; a device resetting every two seconds never stays up long enough to be read. So the counter goes into the persistent boot record:
 
@@ -271,11 +271,11 @@ if (status.bits.invalid_reset) {
 ```
 
 > [!TIP]
-> **Reading a returned unit.** Read the log → is there a FATAL boot-loop entry → which module's event code comes right before it → together with the reset bit: "watchdog reset loop after module X" in one read. Adding the stacked PC and CFSR from §2 to the same log is the natural next step.
+> **Reading a returned unit.** Read the log → is there a FATAL boot-loop entry → which module's event code comes right before it → together with the reset bit: "watchdog reset loop after module X" in one read. Adding the stacked PC and CFSR from the HardFault handler to the same log is the natural next step.
 
 ---
 
-## 5 · Practice
+## Practice
 
 1. Connect with OpenOCD + GDB; use `load`, `break`, `bt`.
 2. Write past the end of an array on purpose; catch it with a watchpoint.
@@ -285,38 +285,13 @@ if (status.bits.invalid_reset) {
 
 ---
 
-## 6 · Interview questions
+## Quick answers
 
-<details>
-<summary><b>A variable gets corrupted at random. How do you find the cause?</b></summary>
-
-Put a watchpoint on its address; it stops at the writing instruction and the backtrace shows the source. It's usually a neighbouring buffer overflow; I check the neighbours in the `.map`.
-</details>
-
-<details>
-<summary><b>How do you debug a HardFault?</b></summary>
-
-In the handler, read the stacked PC and LR and CFSR/HFSR/BFAR; map the PC to a line with `addr2line`. The CFSR bit tells the cause: unaligned access, NULL, divide by zero, invalid state.
-</details>
-
-<details>
-<summary><b>The device occasionally resets in the field.</b></summary>
-
-Log the reset cause and the last fault records to persistent memory at boot; for a watchdog reset find which task missed its check-in; for brown-out look at the supply.
-</details>
-
-<details>
-<summary><b>Breakpoint vs watchpoint?</b></summary>
-
-A breakpoint stops at an instruction address; a watchpoint stops when a data address is accessed. A watchpoint answers "who wrote this?".
-</details>
-
-<details>
-<summary><b>How do you design a watchdog in an RTOS?</b></summary>
-
-A watchdog task refreshes the hardware watchdog only when every monitored task has checked in within the period (event flags, wait-all). Start the watchdog as the last step before the scheduler, and log the reset cause and a boot-loop counter in persistent memory.
-</details>
-
+- **A variable gets corrupted at random. How do you find the cause?** Put a watchpoint on its address; it stops at the writing instruction and the backtrace shows the source. It's usually a neighbouring buffer overflow; I check the neighbours in the `.map`.
+- **How do you debug a HardFault?** In the handler, read the stacked PC and LR and CFSR/HFSR/BFAR; map the PC to a line with `addr2line`. The CFSR bit tells the cause: unaligned access, NULL, divide by zero, invalid state.
+- **The device occasionally resets in the field.** Log the reset cause and the last fault records to persistent memory at boot; for a watchdog reset find which task missed its check-in; for brown-out look at the supply.
+- **Breakpoint vs watchpoint?** A breakpoint stops at an instruction address; a watchpoint stops when a data address is accessed. A watchpoint answers "who wrote this?".
+- **How do you design a watchdog in an RTOS?** A watchdog task refreshes the hardware watchdog only when every monitored task has checked in within the period (event flags, wait-all). Start the watchdog as the last step before the scheduler, and log the reset cause and a boot-loop counter in persistent memory.
 ---
 
 ## Principles
@@ -329,3 +304,5 @@ The stacked PC and CFSR often name the cause directly; a handler that doesn't sa
 
 #### 3 — A device in the field must tell its own story
 Without reset cause, fault log and stack high-water mark, a field defect is guesswork.
+
+[← Previous: Board Bring-up](16-board-bring-up.md) · [Back to index](../README.md) · [Next: Firmware Update & Secure Boot →](18-firmware-update-and-secure-boot.md)

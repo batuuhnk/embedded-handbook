@@ -1,14 +1,14 @@
-# 11 · Motor Control
+# 19 · Motor Control
 
 > You want to drive an actuator to a given angle. Raise the PWM and the motor turns, but it overshoots, comes back, oscillates. The question: **how do you get the motor to the target position fast, without overshoot and stable even when the load changes — and what does that mean for the embedded software's timing?** Motor control is where control theory meets real-time software.
 
-**Contents:** [PWM, bridge, feedback](#0--pwm-bridge-feedback) · [PID intuitively](#1--pid-intuitively) · [Cascaded loops](#2--cascaded-loops-the-real-job-of-the-firmware) · [BLDC: 6-step and FOC](#3--bldc-6-step-and-foc) · [Practice](#4--practice) · [Interview questions](#5--interview-questions) · [Principles](#principles)
+**Contents:** [PWM, bridge, feedback](#pwm-bridge-feedback) · [PID intuitively](#pid-intuitively) · [Cascaded loops: the real job of the firmware](#cascaded-loops-the-real-job-of-the-firmware) · [BLDC: 6-step and FOC](#bldc-6-step-and-foc) · [Practice](#practice) · [Quick answers](#quick-answers) · [Principles](#principles)
 
 ---
 
-## 0 · PWM, bridge, feedback
+## PWM, bridge, feedback
 
-### 0.1 PWM
+### PWM
 
 Instead of driving the motor with a fixed voltage, you switch it on and off very fast. The **duty cycle** is the on-time fraction; the motor sees the average voltage.
 
@@ -25,13 +25,13 @@ V_avg = D × V_supply          D = t_on / T_PWM
 | Center-aligned | — | symmetric; current sampled mid-period, away from switching noise |
 | Dead time | hundreds of ns – a few µs | high and low switches of the same leg never conduct at once |
 
-### 0.2 Why feedback
+### Why feedback
 
 Open loop assumes "40 % duty = 1000 rpm"; when the load rises, speed drops and you don't know. Closed loop measures the speed and adjusts the duty to correct the difference (the error).
 
 ---
 
-## 1 · PID intuitively
+## PID intuitively
 
 | Term | What it does | Car analogy | Too much of it |
 |---|---|---|---|
@@ -39,12 +39,12 @@ Open loop assumes "40 % duty = 1000 rpm"; when the load rises, speed drops and y
 | I (integral) | removes accumulated error | speed drops on a hill, add throttle slowly | slow oscillation, windup |
 | D (derivative) | brakes against the rate of change of error | approaching fast, brake early | amplifies noise |
 
-### 1.1 First approach: P only
+### First approach: P only
 
 > [!WARNING]
 > **Diagnosis — steady-state error.** With P alone the motor never quite reaches the target under load: overcoming the load needs a non-zero output, and P gives a non-zero output only with a non-zero error. Raise Kp and the error shrinks, but oscillation starts.
 
-### 1.2 PI and anti-windup
+### PI and anti-windup
 
 The integral term accumulates small persistent errors and adds them to the output; steady-state error goes to zero.
 
@@ -72,7 +72,7 @@ float pi_step(PI_t *c, float ref, float meas)
 
 ---
 
-## 2 · Cascaded loops: the real job of the firmware
+## Cascaded loops: the real job of the firmware
 
 <p align="center">
   <picture>
@@ -90,14 +90,14 @@ float pi_step(PI_t *c, float ref, float meas)
 Rule: each inner loop must be **clearly** faster than the outer one (roughly 5–10×); the outer loop sees the inner one as a block that "reaches its target instantly".
 
 > [!WARNING]
-> **Jitter breaks control.** A PI computation assumes a fixed `ts`. If the current loop runs at 50 µs one time and 70 µs the next, the integral accumulates wrongly, and noise and vibration grow. That is why the current loop is tied to the ADC conversion-complete interrupt (hardware-timed), not to a software timer — see [06](06-real-time-metrics.md).
+> **Jitter breaks control.** A PI computation assumes a fixed `ts`. If the current loop runs at 50 µs one time and 70 µs the next, the integral accumulates wrongly, and noise and vibration grow. That is why the current loop is tied to the ADC conversion-complete interrupt (hardware-timed), not to a software timer — see [chapter 14](14-real-time-metrics.md).
 
 > [!NOTE]
-> **Actuators in larger systems.** Actuator position and supply voltage/current telemetry reported over a system bus (e.g. MIL-STD-1553, [chapter 04](../chapters/04-mil-std-1553.md)) are exactly the quantities these loops measure; telemetry and fault handling around an actuator are part of the same picture.
+> **Actuators in larger systems.** Actuator position and supply voltage/current telemetry reported over a system bus (e.g. MIL-STD-1553, [chapter 04](04-mil-std-1553.md)) are exactly the quantities these loops measure; telemetry and fault handling around an actuator are part of the same picture.
 
 ---
 
-## 3 · BLDC: 6-step and FOC
+## BLDC: 6-step and FOC
 
 | | 6-step (trapezoidal) | FOC |
 |---|---|---|
@@ -124,45 +124,25 @@ static const uint8_t commutation[8][2] = {
 ```
 
 > [!WARNING]
-> **An invalid Hall state is a fault source.** 000 and 111 should never occur physically; if seen, a sensor or cable has failed. Monitor it with built-in-test logic ([chapter 06](../chapters/06-software-architecture.md)): once is transient; if it persists, put the motor into a safe state.
+> **An invalid Hall state is a fault source.** 000 and 111 should never occur physically; if seen, a sensor or cable has failed. Monitor it with built-in-test logic ([chapter 06](06-software-architecture.md)): once is transient; if it persists, put the motor into a safe state.
 
 ---
 
-## 4 · Practice
+## Practice
 
 1. Set up a timer for center-aligned PWM with dead time; trigger the ADC mid-PWM and verify on an oscilloscope.
 2. Build a PI speed loop on a simple DC motor (or a simulation); compare the step response with and without anti-windup.
-3. Measure the speed loop's period jitter ([06](06-real-time-metrics.md)).
+3. Measure the speed loop's period jitter ([chapter 14](14-real-time-metrics.md)).
 4. Summarise the FOC block diagram from an application note in your own words.
 
 ---
 
-## 5 · Interview questions
+## Quick answers
 
-<details>
-<summary><b>Why is dead time needed?</b></summary>
-
-If the high and low switches conduct at the same time during transitions, the supply is short-circuited (shoot-through); dead time prevents it.
-</details>
-
-<details>
-<summary><b>What is integral windup and how do you prevent it?</b></summary>
-
-While the output is saturated the integral keeps growing; after saturation ends there is a large overshoot. Freezing or clamping the integral in saturation fixes it.
-</details>
-
-<details>
-<summary><b>Why cascaded loops?</b></summary>
-
-The inner (current) loop rejects fast disturbances (load, supply); the outer loops focus on slower targets. Each loop can be tuned separately.
-</details>
-
-<details>
-<summary><b>Why does timing matter in a control loop?</b></summary>
-
-A discrete controller assumes a fixed sample time; jitter changes the effective gain and reduces the stability margin. The current loop runs in a hardware-triggered interrupt.
-</details>
-
+- **Why is dead time needed?** If the high and low switches conduct at the same time during transitions, the supply is short-circuited (shoot-through); dead time prevents it.
+- **What is integral windup and how do you prevent it?** While the output is saturated the integral keeps growing; after saturation ends there is a large overshoot. Freezing or clamping the integral in saturation fixes it.
+- **Why cascaded loops?** The inner (current) loop rejects fast disturbances (load, supply); the outer loops focus on slower targets. Each loop can be tuned separately.
+- **Why does timing matter in a control loop?** A discrete controller assumes a fixed sample time; jitter changes the effective gain and reduces the stability margin. The current loop runs in a hardware-triggered interrupt.
 ---
 
 ## Principles
@@ -175,3 +155,5 @@ Current ≫ speed ≫ position; each feeds the one outside it.
 
 #### 3 — Design for saturation
 Real actuators are limited; anti-windup and invalid sensor states are handled from the start.
+
+[← Previous: Firmware Update & Secure Boot](18-firmware-update-and-secure-boot.md) · [Back to index](../README.md)

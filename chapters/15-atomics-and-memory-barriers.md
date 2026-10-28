@@ -1,12 +1,12 @@
-# 07 · Atomics & Memory Barriers
+# 15 · Atomics & Memory Barriers
 
-> [Chapter 01](../chapters/01-embedded-c.md) says "`volatile` does not make anything atomic". The interviewer's next question is always the same: **then what does, and what exactly breaks in the field when `volatile` and atomic are mixed up?** This note builds the answer at assembly level.
+> [Chapter 01](01-embedded-c.md) says "`volatile` does not make anything atomic". The natural next question: **then what does, and what exactly breaks in the field when `volatile` and atomic are mixed up?** This note builds the answer at assembly level.
 
-**Contents:** [Why `x++` is not one step](#0--why-x-is-not-one-step) · [Four fixes](#1--four-fixes-and-when-to-use-which) · [Memory barriers](#2--memory-barriers-guaranteeing-order) · [Two patterns from real firmware](#3--two-patterns-from-real-firmware) · [Practice](#4--practice) · [Interview questions](#5--interview-questions) · [Principles](#principles)
+**Contents:** [Why `x++` is not one step](#why-x-is-not-one-step) · [Four fixes and when to use which](#four-fixes-and-when-to-use-which) · [Memory barriers: guaranteeing order](#memory-barriers-guaranteeing-order) · [Two patterns from real firmware](#two-patterns-from-real-firmware) · [Practice](#practice) · [Quick answers](#quick-answers) · [Principles](#principles)
 
 ---
 
-## 0 · Why `x++` is not one step
+## Why `x++` is not one step
 
 One line of C, `x++`, is three Cortex-M instructions:
 
@@ -45,9 +45,9 @@ An interrupt can land between these instructions. If the interrupt changes the s
 
 ---
 
-## 1 · Four fixes and when to use which
+## Four fixes and when to use which
 
-### 1.1 Short critical section
+### Short critical section
 
 ```c
 uint32_t primask = __get_PRIMASK();   /* save the previous state */
@@ -56,7 +56,7 @@ counter++;
 __set_PRIMASK(primask);               /* safe when nested        */
 ```
 
-### 1.2 C11 atomics
+### C11 atomics
 
 ```c
 #include <stdatomic.h>
@@ -64,7 +64,7 @@ static atomic_uint counter;
 atomic_fetch_add(&counter, 1);        /* LDREX/STREX loop on Cortex-M3 and up */
 ```
 
-### 1.3 Exclusive access (what C11 compiles to)
+### Exclusive access (what C11 compiles to)
 
 **LDREX / STREX**
 
@@ -79,7 +79,7 @@ retry:
 
 Atomic without disabling interrupts: if anything got in between, the store is refused and retried.
 
-### 1.4 Single-writer rule
+### Single-writer rule
 
 Only the ISR writes, the task only reads; if the variable is 32 bits and aligned, a single read on Cortex-M is already atomic. The cheapest fix — but it must be guaranteed by design.
 
@@ -98,7 +98,7 @@ Only the ISR writes, the task only reads; if the variable is 32 bits and aligned
 
 ---
 
-## 2 · Memory barriers: guaranteeing order
+## Memory barriers: guaranteeing order
 
 The CPU and the compiler may **reorder** memory accesses when they think it does not change the result. On a single-core Cortex-M this rarely shows; where it does show is at the boundary with hardware.
 
@@ -131,11 +131,11 @@ __DSB();
 
 ---
 
-## 3 · Two patterns from real firmware
+## Two patterns from real firmware
 
-### 3.1 Critical section in an error logger with de-duplication
+### Critical section in an error logger with de-duplication
 
-Several tasks can log errors; de-duplication shares three static variables (last event code, repeat count, "limit already reported"). That is the read-modify-write race of §0, one-to-one.
+Several tasks can log errors; de-duplication shares three static variables (last event code, repeat count, "limit already reported"). That is the read-modify-write race shown at the top, one-to-one.
 
 ```c
 bool log_should_write(uint16_t code)
@@ -166,9 +166,9 @@ bool log_should_write(uint16_t code)
 | `__disable_irq` instead of a mutex | the logger is also called before the scheduler starts (during self-test); a mutex needs the scheduler |
 
 > [!WARNING]
-> **A deliberate simplification.** A bare `__disable_irq()` / `__enable_irq()` pair is not safe when nested: if the caller already had interrupts disabled, `__enable_irq()` turns them back on too early. The PRIMASK save/restore of §1.1 removes the risk. If the function is never called from an ISR or from inside another critical section, the simple version is correct — and writing "not called from ISR" in the comment makes review easier.
+> **A deliberate simplification.** A bare `__disable_irq()` / `__enable_irq()` pair is not safe when nested: if the caller already had interrupts disabled, `__enable_irq()` turns them back on too early. The PRIMASK save/restore of the short-critical-section fix removes the risk. If the function is never called from an ISR or from inside another critical section, the simple version is correct — and writing "not called from ISR" in the comment makes review easier.
 
-### 3.2 ISR → task: a flag instead of shared data
+### ISR → task: a flag instead of shared data
 
 ISRs don't write shared variables; they only send a **flag** to the task that owns the data:
 
@@ -179,11 +179,11 @@ ISRs don't write shared variables; they only send a **flag** to the task that ow
 ```
 
 > [!TIP]
-> **Result.** The data is in the DMA buffer, the notification is in the thread flag. The task wakes and reads the buffer; ISR and task never modify the same variable at the same time, so atomicity is solved by design — a lightweight version of the "queue / notification" row in §1.
+> **Result.** The data is in the DMA buffer, the notification is in the thread flag. The task wakes and reads the buffer; ISR and task never modify the same variable at the same time, so atomicity is solved by design — a lightweight version of the "queue / notification" row in the table of fixes.
 
 ---
 
-## 4 · Practice
+## Practice
 
 1. Let a 1 kHz timer ISR and a task increment the same counter for 10 seconds; compare unprotected and protected results (expected: 2 × count).
 2. `arm-none-eabi-objdump -d build-arm/app.elf | grep -A4 counter` — see the instructions of `counter++`.
@@ -191,32 +191,12 @@ ISRs don't write shared variables; they only send a **flag** to the task that ow
 
 ---
 
-## 5 · Interview questions
+## Quick answers
 
-<details>
-<summary><b>volatile vs atomic?</b></summary>
-
-`volatile` stops the compiler from optimising accesses away; atomic guarantees the access is not interrupted. One is a visibility problem, the other an indivisibility problem.
-</details>
-
-<details>
-<summary><b>How do you share a struct between an ISR and a task?</b></summary>
-
-Copy it inside a short critical section, or send it by value through a queue; do the processing outside the critical section.
-</details>
-
-<details>
-<summary><b>How do you increment atomically without disabling interrupts?</b></summary>
-
-LDREX/STREX: exclusive read, modify, exclusive write; if anything intervened, the store fails and the loop retries. In C11, `atomic_fetch_add`.
-</details>
-
-<details>
-<summary><b>DMB vs DSB?</b></summary>
-
-DMB guarantees the order of accesses; DSB also waits for all of them to complete before the next instruction executes.
-</details>
-
+- **volatile vs atomic?** `volatile` stops the compiler from optimising accesses away; atomic guarantees the access is not interrupted. One is a visibility problem, the other an indivisibility problem.
+- **How do you share a struct between an ISR and a task?** Copy it inside a short critical section, or send it by value through a queue; do the processing outside the critical section.
+- **How do you increment atomically without disabling interrupts?** LDREX/STREX: exclusive read, modify, exclusive write; if anything intervened, the store fails and the loop retries. In C11, `atomic_fetch_add`.
+- **DMB vs DSB?** DMB guarantees the order of accesses; DSB also waits for all of them to complete before the next instruction executes.
 ---
 
 ## Principles
@@ -229,3 +209,5 @@ If a single-writer rule can be established, no protection is needed.
 
 #### 3 — Barriers live at the hardware boundary
 DMA, vector table, MPU and multi-core — that's where order matters.
+
+[← Previous: Real-time Metrics](14-real-time-metrics.md) · [Back to index](../README.md) · [Next: Board Bring-up →](16-board-bring-up.md)

@@ -1,12 +1,12 @@
-# 04 · Python & Bash Automation
+# 12 · Python & Bash Automation
 
 > After every new firmware you do the same thing: open a terminal, connect to the device, ask for the version, send a few commands, read the replies. The question: **how do you hand that repeated manual check to a machine, so that you save time and CI can run the same check every time?**
 
-**Contents:** [How a script talks to firmware](#0--how-a-script-talks-to-firmware) · [Version check](#1--example-version-check) · [Command interpreter](#2--firmware-side-a-command-interpreter) · [Reading test output](#3--reading-on-target-test-output) · [Data capture](#4--data-capture-and-analysis) · [Bash](#5--quick-jobs-with-bash) · [Practice](#6--practice) · [Interview questions](#7--interview-questions) · [Principles](#principles)
+**Contents:** [How a script talks to firmware](#how-a-script-talks-to-firmware) · [Example: version check](#example-version-check) · [Firmware side: a command interpreter](#firmware-side-a-command-interpreter) · [Reading on-target test output](#reading-on-target-test-output) · [Data capture and analysis](#data-capture-and-analysis) · [Quick jobs with Bash](#quick-jobs-with-bash) · [Practice](#practice) · [Quick answers](#quick-answers) · [Principles](#principles)
 
 ---
 
-## 0 · How a script talks to firmware
+## How a script talks to firmware
 
 <p align="center">
   <picture>
@@ -33,9 +33,9 @@
 
 ---
 
-## 1 · Example: version check
+## Example: version check
 
-### 1.1 First approach
+### First approach
 
 ```python
 s = serial.Serial("COM5", 115200)
@@ -49,7 +49,7 @@ print(s.readline())
 > - The result is only printed; CI cannot tell success from failure (exit code is always 0).
 > - The port name is hard-coded; it won't work on another machine.
 
-### 1.2 The right way
+### The right way
 
 **`version_check.py`**
 
@@ -84,7 +84,7 @@ sys.exit(0 if reply == a.expect else 1)
 
 ---
 
-## 2 · Firmware side: a command interpreter
+## Firmware side: a command interpreter
 
 **Minimal command table**
 
@@ -118,13 +118,13 @@ On a real link (RS-485 with DMA, for example) the pieces are the same, only arra
 | command table | the binary command set from the interface control document |
 | reply | binary packet back on the same link |
 
-A useful command to add: **read the persistent fault log** one entry at a time (`index` in, entry + total count out). The host then pulls the whole log with a loop — no separate "how many entries" command needed — and a returned unit tells its own story with one script. The command-table structure is the same idea as the table-driven state machine in [chapter 06](../chapters/06-software-architecture.md).
+A useful command to add: **read the persistent fault log** one entry at a time (`index` in, entry + total count out). The host then pulls the whole log with a loop — no separate "how many entries" command needed — and a returned unit tells its own story with one script. The command-table structure is the same idea as the table-driven state machine in [chapter 06](06-software-architecture.md).
 
 ---
 
-## 3 · Reading on-target test output
+## Reading on-target test output
 
-When on-target tests print `PASS:` / `FAIL:` lines over UART ([05 §5](05-unit-test-static-analysis-coverage.md#5--on-target-tests-and-compile-time-gating)), a script turns them into an exit code — the first step of hardware CI ([03 §6.4](03-ci-cd-and-docker.md#64-hil-stage-the-board-does-not-go-into-docker)).
+When on-target tests print `PASS:` / `FAIL:` lines over UART ([chapter 13](13-unit-test-static-analysis-coverage.md#on-target-tests-and-compile-time-gating)), a script turns them into an exit code — the first step of hardware CI ([chapter 11](11-ci-cd-and-docker.md#hil-stage-the-board-does-not-go-into-docker)).
 
 **`read_tests.py`**
 
@@ -144,7 +144,7 @@ sys.exit(1 if fails else 0)
 
 ---
 
-## 4 · Data capture and analysis
+## Data capture and analysis
 
 **`log_capture.py` — 60 s of sensor data + a summary**
 
@@ -169,11 +169,11 @@ for i, axis in enumerate("xyz"):
     print(f"{axis}: mean={statistics.mean(vals):.4f}  std={statistics.stdev(vals):.4f}")
 ```
 
-This is the fastest way to see bias and noise before calibration ([chapter 05](../chapters/05-sensors-and-navigation.md)).
+This is the fastest way to see bias and noise before calibration ([chapter 05](05-sensors-and-navigation.md)).
 
 ---
 
-## 5 · Quick jobs with Bash
+## Quick jobs with Bash
 
 ```bash
 # only error lines from a log, with counts
@@ -185,7 +185,7 @@ arm-none-eabi-size build-arm/app.elf | awk 'NR==2 {print $1, $2, $3}' >> size_hi
 
 ---
 
-## 6 · Practice
+## Practice
 
 1. Add `VER?` and `STAT?` to the firmware.
 2. Verify with `version_check.py`; pass a wrong `--expect` to see exit code 1, unplug the cable to see the timeout.
@@ -193,26 +193,11 @@ arm-none-eabi-size build-arm/app.elf | awk 'NR==2 {print $1, $2, $3}' >> size_hi
 
 ---
 
-## 7 · Interview questions
+## Quick answers
 
-<details>
-<summary><b>How is a test script counted as failed in CI?</b></summary>
-
-It returns a non-zero exit code; the CI job marks that as a failure.
-</details>
-
-<details>
-<summary><b>What should a script do if the device does not answer?</b></summary>
-
-Bound the wait with a timeout, print a clear message about what happened, return a failing exit code.
-</details>
-
-<details>
-<summary><b>How do you automate a repeated test job?</b></summary>
-
-Add a command interface to the device, send commands from Python and verify the replies, report the result as an exit code plus a CSV/report, and hook it into CI.
-</details>
-
+- **How is a test script counted as failed in CI?** It returns a non-zero exit code; the CI job marks that as a failure.
+- **What should a script do if the device does not answer?** Bound the wait with a timeout, print a clear message about what happened, return a failing exit code.
+- **How do you automate a repeated test job?** Add a command interface to the device, send commands from Python and verify the replies, report the result as an exit code plus a CSV/report, and hook it into CI.
 ---
 
 ## Principles
@@ -225,3 +210,5 @@ Every read has a timeout; a hanging script locks the pipeline.
 
 #### 3 — The device must be able to describe itself
 Version, hash, self-test state and fault log readable with one command.
+
+[← Previous: CI/CD & Docker](11-ci-cd-and-docker.md) · [Back to index](../README.md) · [Next: Unit Test, Static Analysis & Coverage →](13-unit-test-static-analysis-coverage.md)

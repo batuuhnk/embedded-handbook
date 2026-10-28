@@ -1,12 +1,12 @@
-# 06 · Real-time Metrics
+# 14 · Real-time Metrics
 
 > "Real-time" often gets heard as "fast". The real question is different: **when an event arrives, can you guarantee the latest moment the system will respond — and can you measure and show it?** Real-time is measured not by average speed but by how predictable the worst case is.
 
-**Contents:** [Five concepts](#0--five-concepts-in-one-picture) · [Why averages mislead](#1--why-the-average-misleads) · [Jitter of a 1 kHz task](#2--example-jitter-of-a-1-khz-sensor-task) · [Measuring](#3--measuring) · [Schedulability](#4--schedulability-does-everything-fit) · [Periods and timeouts in an RTOS design](#5--periods-and-timeouts-in-an-rtos-design) · [Practice](#6--practice) · [Interview questions](#7--interview-questions) · [Principles](#principles)
+**Contents:** [Five concepts in one picture](#five-concepts-in-one-picture) · [Why the average misleads](#why-the-average-misleads) · [Example: jitter of a 1 kHz sensor task](#example-jitter-of-a-1-khz-sensor-task) · [Measuring](#measuring) · [Schedulability: does everything fit?](#schedulability-does-everything-fit) · [Periods and timeouts in an RTOS design](#periods-and-timeouts-in-an-rtos-design) · [Practice](#practice) · [Quick answers](#quick-answers) · [Principles](#principles)
 
 ---
 
-## 0 · Five concepts in one picture
+## Five concepts in one picture
 
 <p align="center">
   <picture>
@@ -37,7 +37,7 @@
 
 ---
 
-## 1 · Why the average misleads
+## Why the average misleads
 
 Duration of one ISR over 1000 measurements:
 
@@ -64,9 +64,9 @@ What stretches the tail:
 
 ---
 
-## 2 · Example: jitter of a 1 kHz sensor task
+## Example: jitter of a 1 kHz sensor task
 
-### 2.1 First approach
+### First approach
 
 ```c
 void vSensorTask(void *p) {
@@ -78,9 +78,9 @@ void vSensorTask(void *p) {
 ```
 
 > [!WARNING]
-> **Diagnosis — the period drifts.** `vTaskDelay(1)` means "wait 1 ms from now". If the work took 300 µs, the real period is 1.3 ms; as the work time varies, so does the period. The filter assumes a fixed sample time, so the attitude estimate degrades ([chapter 05](../chapters/05-sensors-and-navigation.md)).
+> **Diagnosis — the period drifts.** `vTaskDelay(1)` means "wait 1 ms from now". If the work took 300 µs, the real period is 1.3 ms; as the work time varies, so does the period. The filter assumes a fixed sample time, so the attitude estimate degrades ([chapter 05](05-sensors-and-navigation.md)).
 
-### 2.2 Solution
+### Solution
 
 ```c
 void vSensorTask(void *p) {
@@ -97,13 +97,13 @@ void vSensorTask(void *p) {
 
 ---
 
-## 3 · Measuring
+## Measuring
 
-### 3.1 GPIO + logic analyzer
+### GPIO + logic analyzer
 
 Set a pin at the start of the task and clear it at the end. On a logic analyzer, the pulse width is C, the time between rising edges is the period, and the spread of edge times is the jitter.
 
-### 3.2 DWT cycle counter
+### DWT cycle counter
 
 **Cortex-M3/M4/M7 cycle counter**
 
@@ -121,16 +121,16 @@ if (c > c_max) c_max = c;                         /* worst observed time */
 > [!NOTE]
 > Cortex-M0/M0+ have no `CYCCNT`; use a free-running hardware timer instead.
 
-### 3.3 SEGGER SystemView
+### SEGGER SystemView
 
 Shows a timeline of tasks and ISRs: who pre-empted whom, and for how long.
 
 > [!WARNING]
-> **Measured maximum ≠ true WCET.** A measurement only gives the worst of the scenarios you tried. That is why safety-critical systems use static WCET analysis — one of the objectives DO-178C covers with "analysis" ([chapter 07](../chapters/07-do-178c.md)).
+> **Measured maximum ≠ true WCET.** A measurement only gives the worst of the scenarios you tried. That is why safety-critical systems use static WCET analysis — one of the objectives DO-178C covers with "analysis" ([chapter 07](07-do-178c.md)).
 
 ---
 
-## 4 · Schedulability: does everything fit?
+## Schedulability: does everything fit?
 
 **CPU utilisation and the rate-monotonic sufficient condition (Liu–Layland)**
 
@@ -155,7 +155,7 @@ U = 0.70  ≤  0.78 (n=3)  → the sufficient condition holds
 
 ---
 
-## 5 · Periods and timeouts in an RTOS design
+## Periods and timeouts in an RTOS design
 
 A typical sensor firmware with an event-driven comms task and periodic acquisition:
 
@@ -168,7 +168,7 @@ A typical sensor firmware with an event-driven comms task and periodic acquisiti
 | watchdog manager | Normal | `osEventFlagsWait(..., 300 ms)` | 300 ms |
 
 > [!WARNING]
-> **Where to look in such code — a period built with `osDelay`.** `osDelay(10)` at the end of the loop means "wait 10 ms", not "run every 10 ms": the loop's own work (SPI read, self-test update) is added every turn, so the period becomes 10 ms + work and drifts. The fix from §2 applies:
+> **Where to look in such code — a period built with `osDelay`.** `osDelay(10)` at the end of the loop means "wait 10 ms", not "run every 10 ms": the loop's own work (SPI read, self-test update) is added every turn, so the period becomes 10 ms + work and drifts. The `vTaskDelayUntil` fix above applies:
 >
 > ```c
 > uint32_t next = osKernelGetTickCount();
@@ -193,7 +193,7 @@ A typical sensor firmware with an event-driven comms task and periodic acquisiti
 
 ---
 
-## 6 · Practice
+## Practice
 
 1. Toggle a GPIO at the start of a 1 kHz task; measure period and jitter with a logic analyzer.
 2. Show the `vTaskDelay` ↔ `vTaskDelayUntil` difference with measurements.
@@ -202,32 +202,12 @@ A typical sensor firmware with an event-driven comms task and periodic acquisiti
 
 ---
 
-## 7 · Interview questions
+## Quick answers
 
-<details>
-<summary><b>What does real-time mean?</b></summary>
-
-Not fast, but predictable: the latest response time is guaranteed and measurable.
-</details>
-
-<details>
-<summary><b>Latency vs jitter?</b></summary>
-
-Latency is the delay of one response; jitter is how much that delay varies from period to period.
-</details>
-
-<details>
-<summary><b>How do you show the system never misses deadlines?</b></summary>
-
-Determine WCET and period for every task, do a utilisation and, if needed, response-time analysis, then confirm by measuring under worst-case load.
-</details>
-
-<details>
-<summary><b>What increases interrupt latency?</b></summary>
-
-Long critical sections, same- or higher-priority ISRs, BASEPRI masking, flash wait states and cache misses.
-</details>
-
+- **What does real-time mean?** Not fast, but predictable: the latest response time is guaranteed and measurable.
+- **Latency vs jitter?** Latency is the delay of one response; jitter is how much that delay varies from period to period.
+- **How do you show the system never misses deadlines?** Determine WCET and period for every task, do a utilisation and, if needed, response-time analysis, then confirm by measuring under worst-case load.
+- **What increases interrupt latency?** Long critical sections, same- or higher-priority ISRs, BASEPRI masking, flash wait states and cache misses.
 ---
 
 ## Principles
@@ -239,4 +219,6 @@ Real-time correctness is measured by the worst case.
 `vTaskDelayUntil` / `osDelayUntil`; otherwise the work time shifts the period.
 
 #### 3 — Measure, then claim
-A number not seen on GPIO, DWT or SystemView is a guess in an interview.
+A number not seen on GPIO, DWT or SystemView is only a guess.
+
+[← Previous: Unit Test, Static Analysis & Coverage](13-unit-test-static-analysis-coverage.md) · [Back to index](../README.md) · [Next: Atomics & Memory Barriers →](15-atomics-and-memory-barriers.md)

@@ -1,14 +1,14 @@
-# 02 · Build System & Cross-Compile
+# 10 · Build System & Cross-Compile
 
 > You press Build in the IDE, lines scroll past and an `.elf` appears. The question: **what happens in those lines, and how do you reproduce the same result without the IDE — on another machine, on a CI server?** Understanding the build is a prerequisite for CI and the answer to "can you build without the IDE?"
 
-**Contents:** [Source to flash](#0--from-source-to-flash) · [Make and CMake](#1--make-and-cmake) · [Minimal setup](#2--minimal-setup) · [The `.map` file](#3--the-map-file) · [IDE builds and bootloader offsets](#4--ide-builds-and-bootloader-offsets) · [Practice](#5--practice) · [Interview questions](#6--interview-questions) · [Principles](#principles)
+**Contents:** [From source to flash](#from-source-to-flash) · [Make and CMake](#make-and-cmake) · [Minimal setup](#minimal-setup) · [The `.map` file](#the-map-file) · [IDE builds and bootloader offsets](#ide-builds-and-bootloader-offsets) · [Practice](#practice) · [Quick answers](#quick-answers) · [Principles](#principles)
 
 ---
 
-## 0 · From source to flash
+## From source to flash
 
-### 0.1 The build chain
+### The build chain
 
 <p align="center">
   <picture>
@@ -26,15 +26,15 @@
 
 An analogy: the compiler is the author writing each chapter separately, the linker is the editor binding them into a book with page numbers, and the linker script is the page layout that says "the cover goes here, the table of contents there".
 
-### 0.2 Cross-compiling
+### Cross-compiling
 
 Your PC is x86; the target is a Cortex-M. The PC's `gcc` emits x86 code, so the target needs **another compiler**: `arm-none-eabi-gcc`. The name says it all: *arm* the architecture, *none* no operating system (bare-metal), *eabi* the calling convention.
 
 ---
 
-## 1 · Make and CMake
+## Make and CMake
 
-### 1.1 First approach: commands by hand
+### First approach: commands by hand
 
 ```bash
 arm-none-eabi-gcc -mcpu=cortex-m4 -mthumb -c main.c -o main.o
@@ -45,11 +45,11 @@ arm-none-eabi-gcc -T stm32f4.ld main.o uart.o -o app.elf
 > [!WARNING]
 > **Diagnosis — why manual commands do not scale.** With 40 files, rebuilding everything after each change is slow; tracking which file changed is impossible; forget a flag on one file and you silently get a differently built binary.
 
-### 1.2 Make: rebuild only what changed
+### Make: rebuild only what changed
 
 Make works with "target, dependencies, command" rules. If `uart.c` is newer than `uart.o`, only that file is rebuilt.
 
-### 1.3 CMake: the layer that generates the build
+### CMake: the layer that generates the build
 
 CMake does not compile anything itself. You describe the project in a platform-independent way (`CMakeLists.txt`), and CMake **generates** Make or Ninja files. A **toolchain file** tells it which compiler to use.
 
@@ -68,11 +68,11 @@ CMake does not compile anything itself. You describe the project in a platform-i
 | Host + ARM builds from one source | hard | two build directories, easy |
 
 > [!TIP]
-> **Result.** With CMake the same source builds on the host (unit tests) and for ARM (firmware); only the toolchain file changes. This is the foundation of CI and of the tests in [05](05-unit-test-static-analysis-coverage.md).
+> **Result.** With CMake the same source builds on the host (unit tests) and for ARM (firmware); only the toolchain file changes. This is the foundation of CI and of the tests in [chapter 13](13-unit-test-static-analysis-coverage.md).
 
 ---
 
-## 2 · Minimal setup
+## Minimal setup
 
 **`cmake/arm-gcc.cmake` — toolchain file**
 
@@ -123,9 +123,9 @@ arm-none-eabi-size build-arm/app.elf
 
 ---
 
-## 3 · The `.map` file
+## The `.map` file
 
-### 3.1 Where it is produced
+### Where it is produced
 
 The `.map` is produced by the **linker**, in the link step. The compiler (`gcc -c`) cannot produce it, because addresses are not known yet. The linker assigns the addresses, so the linker writes the "what did I put where" report.
 
@@ -152,7 +152,7 @@ The `-Wl,` prefix makes gcc pass the option that follows to the linker.
 | TI Code Composer Studio | `Debug/` → `project_name.map` | linker option `--map_file` |
 | Hand-written `make` | wherever your Makefile says | `LDFLAGS += -Wl,-Map=$(TARGET).map` |
 
-### 3.2 What is inside
+### What is inside
 
 | Part | Information |
 |---|---|
@@ -161,36 +161,36 @@ The `-Wl,` prefix makes gcc pass the option that follows to the linker.
 | Symbols | address and size of each function/global variable, and which `.o` it came from |
 | Discarded input sections | unused code removed by `--gc-sections` |
 
-### 3.3 Reading it
+### Reading it
 
 ```
 .text.filter_update   0x08001a40   0x1f4   build/src/filter.c.o
 .bss.rx_buffer        0x20000400   0x800   build/src/uart.c.o
 ```
 
-Read as: `filter_update` is in flash at 0x08001a40, 500 bytes; `rx_buffer` is in RAM, 2 KB. "Why is flash full?" and "which function contains the PC from the HardFault?" are both answered here ([09](09-gdb-and-fault-analysis.md)).
+Read as: `filter_update` is in flash at 0x08001a40, 500 bytes; `rx_buffer` is in RAM, 2 KB. "Why is flash full?" and "which function contains the PC from the HardFault?" are both answered here ([chapter 17](17-gdb-and-fault-analysis.md)).
 
-### 3.4 Which symbols are listed and which are not
+### Which symbols are listed and which are not
 
 | What | Section | In the `.map` |
 |---|---|---|
 | global function / variable | `.text`, `.data`, `.bss` | ✔ name + address, on its own line |
-| `static` function / variable (including function-local statics) | `.text`, `.data`, `.bss` | ✔ only **in the section name**: `.bss.s_retry_count` |
+| `static` function / variable (including function-local statics) | `.text`, `.data`, `.bss` | ✔ only **in the section name**: `.bss.s_repeatCount` |
 | `const` tables, strings | `.rodata` | ✔ |
 | local (automatic) variable | stack | ✘ no fixed address |
 
 > [!TIP]
 > **Seeing statics.** The linker writes a symbol line only for global symbols. With `-ffunction-sections -fdata-sections` (the STM32CubeIDE default), each static gets its own section, so you find it by section name. Function-local statics get a suffix: `.bss.counter.0`. With those flags off, all statics of a file appear as one `.bss` block with no names. If you can't find one: `arm-none-eabi-nm -n -S app.elf`, or in GDB `p &variable`.
 
-**In practice:** when a buffer overruns into its neighbour, find the buffer's line in the `.map`; the variable on the next line is the victim. Put a watchpoint on its address ([09 §1.3](09-gdb-and-fault-analysis.md#13-watchpoints-in-stm32cubeide)).
+**In practice:** when a buffer overruns into its neighbour, find the buffer's line in the `.map`; the variable on the next line is the victim. Put a watchpoint on its address ([chapter 17](17-gdb-and-fault-analysis.md#watchpoints-in-stm32cubeide)).
 
 ---
 
-## 4 · IDE builds and bootloader offsets
+## IDE builds and bootloader offsets
 
-### 4.1 What the IDE does behind the button
+### What the IDE does behind the button
 
-An Eclipse-based IDE such as STM32CubeIDE runs the same chain as §0: `arm-none-eabi-gcc` compiles each `.c`, the linker combines them according to the linker script, and `.elf`, `.map` and optionally `.bin/.hex` land in `Debug/`. It uses a "managed build": you don't write makefiles, it **generates** `Debug/makefile` and `subdir.mk` from the project settings.
+An Eclipse-based IDE such as STM32CubeIDE runs the same build chain shown at the top: `arm-none-eabi-gcc` compiles each `.c`, the linker combines them according to the linker script, and `.elf`, `.map` and optionally `.bin/.hex` land in `Debug/`. It uses a "managed build": you don't write makefiles, it **generates** `Debug/makefile` and `subdir.mk` from the project settings.
 
 | Where in STM32CubeIDE | Command-line equivalent |
 |---|---|
@@ -201,7 +201,7 @@ An Eclipse-based IDE such as STM32CubeIDE runs the same chain as §0: `arm-none-
 | … → MCU Post build outputs | `objcopy -O binary app.elf app.bin` |
 | Build Configurations (Debug / Release) | two build directories with different flag sets |
 
-### 4.2 When the application does not start at the beginning of flash
+### When the application does not start at the beginning of flash
 
 With a bootloader in the first pages of flash, the application is linked at an offset. Example with a 32 KB bootloader on a 512 KB part:
 
@@ -218,7 +218,7 @@ MEMORY
 Keep the numbers in one shared header that both the bootloader and the application include:
 
 ```c
-/* shared/memory_map.h — single source of truth */
+/* shared/mem_map.h — single source of truth */
 #define BOOTLOADER_START_ADDR    0x08000000U
 #define BOOTLOADER_SIZE          (32U * 1024U)
 #define APPLICATION_START_ADDR   0x08008000U
@@ -239,7 +239,7 @@ Keep the numbers in one shared header that both the bootloader and the applicati
 
 ---
 
-## 5 · Practice
+## Practice
 
 1. Generate the project from STM32CubeMX with "CMake" (or "Makefile") output; close the IDE and build from the terminal.
 2. Move the toolchain settings into a separate file; keep two directories, `build-host/` and `build-arm/`.
@@ -248,32 +248,12 @@ Keep the numbers in one shared header that both the bootloader and the applicati
 
 ---
 
-## 6 · Interview questions
+## Quick answers
 
-<details>
-<summary><b>CMake vs Make?</b></summary>
-
-Make builds; CMake generates Make/Ninja files from a platform-independent project description. For cross-compiling, the compiler is chosen with a toolchain file, so the same project builds separately for host and target.
-</details>
-
-<details>
-<summary><b><code>.elf</code> vs <code>.bin</code>?</b></summary>
-
-The `.elf` contains sections, symbols and debug info; the debugger uses it. The `.bin` is just the raw bytes to write to flash.
-</details>
-
-<details>
-<summary><b>The firmware no longer fits in flash. What do you do?</b></summary>
-
-Find the largest symbols with `size` and the `.map`; use `--gc-sections` and `-Os`, review large constant tables, replace heavy libraries such as `printf` with lighter versions.
-</details>
-
-<details>
-<summary><b>What does a linker script do?</b></summary>
-
-It defines the memory regions (flash and RAM addresses and sizes) and which section goes where, and gives the startup code the flash address of the `.data` initial values.
-</details>
-
+- **CMake vs Make?** Make builds; CMake generates Make/Ninja files from a platform-independent project description. For cross-compiling, the compiler is chosen with a toolchain file, so the same project builds separately for host and target.
+- **`.elf` vs `.bin`?** The `.elf` contains sections, symbols and debug info; the debugger uses it. The `.bin` is just the raw bytes to write to flash.
+- **The firmware no longer fits in flash. What do you do?** Find the largest symbols with `size` and the `.map`; use `--gc-sections` and `-Os`, review large constant tables, replace heavy libraries such as `printf` with lighter versions.
+- **What does a linker script do?** It defines the memory regions (flash and RAM addresses and sizes) and which section goes where, and gives the startup code the flash address of the `.data` initial values.
 ---
 
 ## Principles
@@ -286,3 +266,5 @@ The toolchain file separates host from target; the source files stay the same in
 
 #### 3 — The `.map` file is evidence
 Flash/RAM usage and fault addresses are read from the map file, not guessed.
+
+[← Previous: Git & Code Review](09-git-and-code-review.md) · [Back to index](../README.md) · [Next: CI/CD & Docker →](11-ci-cd-and-docker.md)

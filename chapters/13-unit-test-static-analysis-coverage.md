@@ -1,12 +1,12 @@
-# 05 · Unit Test, Static Analysis & Coverage
+# 13 · Unit Test, Static Analysis & Coverage
 
 > You changed a packet parser, connected the board, sent a few packets — it worked. The question: **how do you know it also works with a bad checksum, a truncated packet or the longest possible packet — and who will notice when someone changes this function six months from now?** The answer: tests that run in seconds without hardware, tools that look for bugs without running the code, and a measurement of what the tests do not cover.
 
-**Contents:** [Test levels](#0--test-levels) · [Testable hardware code](#1--making-hardware-dependent-code-testable) · [Unity](#2--first-tests-with-unity) · [Static analysis](#3--static-analysis) · [Coverage](#4--coverage-where-the-tests-dont-look) · [On-target tests](#5--on-target-tests-and-compile-time-gating) · [Practice](#6--practice) · [Interview questions](#7--interview-questions) · [Principles](#principles)
+**Contents:** [Test levels](#test-levels) · [Making hardware-dependent code testable](#making-hardware-dependent-code-testable) · [First tests with Unity](#first-tests-with-unity) · [Static analysis](#static-analysis) · [Coverage: where the tests don't look](#coverage-where-the-tests-dont-look) · [On-target tests and compile-time gating](#on-target-tests-and-compile-time-gating) · [Practice](#practice) · [Quick answers](#quick-answers) · [Principles](#principles)
 
 ---
 
-## 0 · Test levels
+## Test levels
 
 <p align="center">
   <picture>
@@ -24,13 +24,13 @@
 The pyramid logic: catch most defects where it is cheapest (unit) and keep the expensive tests (HIL) for what unit tests cannot see.
 
 > [!NOTE]
-> **DO-178C link.** The "requirements-based test: nominal + robustness" split from [chapter 07](../chapters/07-do-178c.md) applies here too: every function is tested with normal inputs **and** with invalid/edge inputs.
+> **DO-178C link.** The "requirements-based test: nominal + robustness" split from [chapter 07](07-do-178c.md) applies here too: every function is tested with normal inputs **and** with invalid/edge inputs.
 
 ---
 
-## 1 · Making hardware-dependent code testable
+## Making hardware-dependent code testable
 
-### 1.1 First approach
+### First approach
 
 ```c
 int16_t imu_read_accel_x(void) {
@@ -43,7 +43,7 @@ int16_t imu_read_accel_x(void) {
 > [!WARNING]
 > **Diagnosis — why this cannot be tested.** The function is tied to the HAL; there is no `HAL_SPI_Receive` on the PC, so it doesn't even compile. To check the big-endian conversion you need a board, a sensor and a debugger.
 
-### 1.2 Solution: put the dependency behind an interface
+### Solution: put the dependency behind an interface
 
 <p align="center">
   <picture>
@@ -52,7 +52,7 @@ int16_t imu_read_accel_x(void) {
   </picture>
 </p>
 
-The `Accel_IO_t` idea from [chapter 06](../chapters/06-software-architecture.md): hardware access is injected through function pointers. The firmware build wires in the real SPI; the test build wires in a fake. The logic (conversion, parsing, filtering) is the same code in both.
+The `Accel_IO_t` idea from [chapter 06](06-software-architecture.md): hardware access is injected through function pointers. The firmware build wires in the real SPI; the test build wires in a fake. The logic (conversion, parsing, filtering) is the same code in both.
 
 | | Stub | Mock |
 |---|---|---|
@@ -64,7 +64,7 @@ The `Accel_IO_t` idea from [chapter 06](../chapters/06-software-architecture.md)
 
 ---
 
-## 2 · First tests with Unity
+## First tests with Unity
 
 **`test_packet.c`**
 
@@ -109,7 +109,7 @@ int main(void) {
 
 ---
 
-## 3 · Static analysis
+## Static analysis
 
 Reads the code without running it and finds likely defects: uninitialised variables, out-of-bounds array access, NULL dereference, unused values, MISRA rule violations.
 
@@ -126,7 +126,7 @@ src/packet.c:42:12: error: Array 'buf[8]' accessed at index 8, which is out of b
 
 ---
 
-## 4 · Coverage: where the tests don't look
+## Coverage: where the tests don't look
 
 ```c
 int clamp(int v, int lo, int hi) {
@@ -154,7 +154,7 @@ gcovr -r . --branches
 
 ---
 
-## 5 · On-target tests and compile-time gating
+## On-target tests and compile-time gating
 
 Not every team has host tests. A common, pragmatic alternative: a small test framework that runs **on the target**, living in the same source tree as the product code and switched on by a preprocessor symbol.
 
@@ -165,7 +165,7 @@ Not every team has host tests. A common, pragmatic alternative: a small test fra
   </picture>
 </p>
 
-### 5.1 Gating with `#ifdef`
+### Gating with `#ifdef`
 
 ```c
 #ifdef PROJECT_TEST
@@ -193,7 +193,7 @@ The symbol is not `#define`d in code; it is set in the build configuration (STM3
 > [!WARNING]
 > **Why the tests run exactly there.** `run_all_tests()` runs **after** hardware initialisation (the board layer is ready) but **before** the independent watchdog starts. Once started, the IWDG cannot be stopped and resets the MCU if not refreshed within its timeout; long tests would put the board into a reset loop. The order is a deliberate design decision.
 
-### 5.2 The framework: one macro
+### The framework: one macro
 
 ```c
 #define TEST_ASSERT(cond, msg)                                     \
@@ -215,7 +215,7 @@ The symbol is not `#define`d in code; it is set in the build configuration (STM3
 | `#define F(m) { a(m); b++; }` | `if (x) F("e"); else ...` → the `;` after `}` ends the `if`, `else` has no `if` → compile error |
 | `#define F(m) do { a(m); b++; } while (0)` | one statement that needs the trailing `;`; works in any `if/else`; `while (0)` is optimised away |
 
-### 5.3 What to test, layer by layer
+### What to test, layer by layer
 
 | Layer | Example module | Example test |
 |---|---|---|
@@ -242,9 +242,9 @@ static void test_crc_calculate_null_data(void)
 > [!TIP]
 > **Delete dead tests.** Tests live with the product code; a test for a function that no longer exists, or one that verifies nothing, is deleted — not commented out.
 
-### 5.4 On-target vs host (Unity)
+### On-target vs host (Unity)
 
-| | On-target framework | Host (Unity, §2) |
+| | On-target framework | Host (Unity) |
 |---|---|---|
 | Runs on | the board | the PC, in seconds |
 | Needs hardware | yes | no (mock/fake) |
@@ -252,52 +252,27 @@ static void test_crc_calculate_null_data(void)
 | In CI | needs a hardware runner | easy on every commit |
 | Coverage | hard | easy with `gcov` |
 
-The two complement each other: hardware-dependent modules on target, pure logic (ring buffer, sliding windows, protocol parsing) on the host — those are the first candidates to move ([03 §6.3](03-ci-cd-and-docker.md#63-what-moves-from-the-board-to-the-host)).
+The two complement each other: hardware-dependent modules on target, pure logic (ring buffer, sliding windows, protocol parsing) on the host — those are the first candidates to move ([chapter 11](11-ci-cd-and-docker.md#what-moves-from-the-board-to-the-host)).
 
 ---
 
-## 6 · Practice
+## Practice
 
 1. Make `packet.c` independent of the HAL.
 2. Add Unity; write four tests: nominal, bad checksum, short packet, maximum length.
-3. Hook it into CMake with `ctest`; add it to CI ([03](03-ci-cd-and-docker.md)).
+3. Hook it into CMake with `ctest`; add it to CI ([chapter 11](11-ci-cd-and-docker.md)).
 4. Run cppcheck; fix every warning or write down why it stays.
 5. Measure branch coverage, find the branch that keeps it below 100 % and add a test.
 
 ---
 
-## 7 · Interview questions
+## Quick answers
 
-<details>
-<summary><b>How do you test hardware-dependent code?</b></summary>
-
-Put hardware access behind an interface; test the logic on the host with a fake implementation. Verify real hardware behaviour with integration and HIL tests on the board.
-</details>
-
-<details>
-<summary><b>Mock vs stub?</b></summary>
-
-A stub returns fixed values; a mock also verifies which parameters it was called with and how many times.
-</details>
-
-<details>
-<summary><b>Statement vs branch coverage?</b></summary>
-
-Statement coverage asks whether each line ran; branch coverage asks whether both outcomes of each decision ran. Branch is stronger; MC/DC also requires each sub-condition's independent effect ([chapter 07](../chapters/07-do-178c.md)).
-</details>
-
-<details>
-<summary><b>Is 100 % coverage enough?</b></summary>
-
-No. It measures lines executed, not correct results; it is meaningful only together with requirements-based and robustness tests.
-</details>
-
-<details>
-<summary><b>Why wrap a multi-statement macro in <code>do { } while (0)</code>?</b></summary>
-
-So the macro, followed by `;`, behaves as one statement and is safe inside an `if/else` without braces.
-</details>
-
+- **How do you test hardware-dependent code?** Put hardware access behind an interface; test the logic on the host with a fake implementation. Verify real hardware behaviour with integration and HIL tests on the board.
+- **Mock vs stub?** A stub returns fixed values; a mock also verifies which parameters it was called with and how many times.
+- **Statement vs branch coverage?** Statement coverage asks whether each line ran; branch coverage asks whether both outcomes of each decision ran. Branch is stronger; MC/DC also requires each sub-condition's independent effect ([chapter 07](07-do-178c.md)).
+- **Is 100 % coverage enough?** No. It measures lines executed, not correct results; it is meaningful only together with requirements-based and robustness tests.
+- **Why wrap a multi-statement macro in `do { } while (0)`?** So the macro, followed by `;`, behaves as one statement and is safe inside an `if/else` without braces.
 ---
 
 ## Principles
@@ -310,3 +285,5 @@ The normal case already works; defects live at the boundaries and in bad input.
 
 #### 3 — Coverage is a compass, not a target
 It shows missing tests; a high number does not prove correctness.
+
+[← Previous: Python & Bash Automation](12-python-and-bash-automation.md) · [Back to index](../README.md) · [Next: Real-time Metrics →](14-real-time-metrics.md)

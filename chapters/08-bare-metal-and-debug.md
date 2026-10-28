@@ -158,7 +158,7 @@ IWDG->KR  = 0xCCCC;        /* start                  */
 void watchdog_feed(void) { IWDG->KR = 0xAAAA; }
 ```
 
-Under an RTOS → the watchdog-manager pattern ([chapter 02](02-rtos-and-concurrency.md#watchdog-in-an-rtos), [roadmap 09](../roadmap/09-gdb-and-fault-analysis.md#41-watchdog-manager-which-task-is-stuck)).
+Under an RTOS → the watchdog-manager pattern ([chapter 02](02-rtos-and-concurrency.md#watchdog-in-an-rtos), [chapter 17](17-gdb-and-fault-analysis.md#watchdog-manager-which-task-is-stuck)).
 
 ### Bootloader
 
@@ -182,7 +182,7 @@ void jump_to_application(uint32_t app_addr) {
 }
 ```
 
-**Safety:** verify with a CRC/checksum · recover from a power loss during the write (dual bank / golden image) · keep the bootloader small and simple · put bootloader and application in separate flash regions in the linker script. Full treatment in [roadmap 10](../roadmap/10-firmware-update-and-secure-boot.md).
+**Safety:** verify with a CRC/checksum · recover from a power loss during the write (dual bank / golden image) · keep the bootloader small and simple · put bootloader and application in separate flash regions in the linker script. Full treatment in [chapter 18](18-firmware-update-and-secure-boot.md).
 
 ### ADC
 
@@ -203,7 +203,7 @@ TIM3->CCER  |= TIM_CCER_CC1E;
 TIM3->CR1   |= TIM_CR1_CEN;
 ```
 
-`f_pwm = f_timer / ((PSC+1)(ARR+1))`, duty = `CCR / (ARR+1)`. Uses: LEDs, motor speed, servos, a cheap DAC. Motor control in depth → [roadmap 11](../roadmap/11-motor-control.md).
+`f_pwm = f_timer / ((PSC+1)(ARR+1))`, duty = `CCR / (ARR+1)`. Uses: LEDs, motor speed, servos, a cheap DAC. Motor control in depth → [chapter 19](19-motor-control.md).
 
 ---
 
@@ -220,7 +220,7 @@ TIM3->CR1   |= TIM_CR1_CEN;
 - Distribution: SYSCLK → AHB → **APB1** (slower: I²C, UART, some timers) / **APB2** (faster: SPI1, ADC, some timers).
 
 > [!IMPORTANT]
-> A wrong clock breaks UART baud rates, SPI speed and timer periods all at once. It is **the first thing to verify** on a new board ([roadmap 08](../roadmap/08-board-bring-up.md)).
+> A wrong clock breaks UART baud rates, SPI speed and timer periods all at once. It is **the first thing to verify** on a new board ([chapter 16](16-board-bring-up.md)).
 
 **MPU:** isolates memory regions so a task cannot write outside its own. **SysTick conflicts:** when both the HAL and the RTOS want SysTick, move the HAL time base to a spare timer (e.g. TIM6).
 
@@ -235,7 +235,7 @@ TIM3->CR1   |= TIM_CR1_CEN;
 | Trace | separate pins | printf-style trace via **SWO** |
 | Used for | FPGAs, multi-chip chains, boundary scan | Cortex-M (STM32, TI) |
 
-SWD is the default on Cortex-M: two pins (a PCB advantage), full debug, SWO trace (not on Cortex-M0/M0+). JTAG is for multi-chip chains. Probes: **ST-LINK** (built into dev boards), **J-Link** (faster, more features). Using GDB without the IDE → [roadmap 09](../roadmap/09-gdb-and-fault-analysis.md).
+SWD is the default on Cortex-M: two pins (a PCB advantage), full debug, SWO trace (not on Cortex-M0/M0+). JTAG is for multi-chip chains. Probes: **ST-LINK** (built into dev boards), **J-Link** (faster, more features). Using GDB without the IDE → [chapter 17](17-gdb-and-fault-analysis.md).
 
 ---
 
@@ -307,7 +307,7 @@ void test_sensor_parse(void) {
 
 2. **On the target:** results reported over UART/SWO; drivers verified on real hardware.
 
-In the V-model: unit → integration → system. Tools: Unity, CMock, Ceedling. Full workflow → [roadmap 05](../roadmap/05-unit-test-static-analysis-coverage.md).
+In the V-model: unit → integration → system. Tools: Unity, CMock, Ceedling. Full workflow → [chapter 13](13-unit-test-static-analysis-coverage.md).
 
 ### SIL and HIL
 
@@ -339,4 +339,4 @@ In the V-model: unit → integration → system. Tools: Unity, CMock, Ceedling. 
 - **JTAG vs SWD?** SWD is 2 pins + SWO, for Cortex-M; JTAG has more pins, daisy-chaining and boundary scan.
 - **Finding a communication fault?** Logic analyzer → oscilloscope → software (timeout, CRC, retry, counters) → GPIO timing.
 
-[← Previous: DO-178C](07-do-178c.md) · [Back to index](../README.md) · [Roadmap →](../roadmap/README.md)
+[← Previous: DO-178C](07-do-178c.md) · [Back to index](../README.md) · [Next: Git & Code Review →](09-git-and-code-review.md)
