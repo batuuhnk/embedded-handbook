@@ -2,7 +2,7 @@
 
 > C features that behave differently, or matter more, when the code runs on a microcontroller. Each topic covers what the feature does, when I use it, and what can go wrong.
 
-**Contents:** [volatile](#volatile) · [const](#const) · [static](#static) · [Struct padding & bit-fields](#struct-padding-and-bit-fields) · [Pointers & function pointers](#pointers-and-function-pointers) · [Memory layout](#memory-layout) · [Macro vs inline](#macro-vs-inline-function) · [Undefined behaviour](#undefined-behaviour) · [MISRA C](#misra-c) · [Endianness](#endianness) · [Fixed-width types](#fixed-width-types-stdinth)
+**Contents:** [volatile](#volatile) · [const](#const) · [static](#static) · [extern & linkage](#extern-and-linkage) · [Struct padding & bit-fields](#struct-padding-and-bit-fields) · [Pointers & function pointers](#pointers-and-function-pointers) · [Memory layout](#memory-layout) · [Macro vs inline](#macro-vs-inline-function) · [Undefined behaviour](#undefined-behaviour) · [MISRA C](#misra-c) · [Endianness](#endianness) · [Fixed-width types](#fixed-width-types-stdinth)
 
 ---
 
@@ -48,7 +48,127 @@ const volatile uint32_t *const STATUS = (const volatile uint32_t *)0x40021000u;
 
 I use file-scope `static` for module encapsulation: private state and helpers stay inside the module, names cannot collide, and only the module's own functions can touch its state.
 
-**Risk:** a function-local `static` makes the function **non-reentrant**. If two tasks (or a task and an ISR) call it, they share hidden state. See [reentrancy](02-rtos-and-concurrency.md#reentrancy).
+> [!WARNING]
+> **A function-local `static` makes the function non-reentrant.** If two tasks (or a task and an ISR) call it, they share hidden state.
+
+### What reentrancy means
+
+A **reentrant** function still works correctly when it is called again — by an interrupt or another task — before the previous call has finished. The condition is simple: every call works on **its own data** (parameters and stack locals). A function-local `static` is one copy shared by every call, so the second call overwrites the first one's data.
+
+```c
+const char *temp_to_str(int16_t centi)
+{
+    static char buf[12];                       /* one copy, shared by everyone */
+    snprintf(buf, sizeof buf, "%d.%02d", centi / 100, abs(centi % 100));
+    return buf;
+}
+```
+
+| Time | Task A | Task B (higher priority) | `buf` |
+|---|---|---|---|
+| 1 | `temp_to_str(2350)` starts writing | | `"23.5…"` (half done) |
+| 2 | *(pre-empted)* | `temp_to_str(-120)` → `"-1.20"` | `"-1.20"` |
+| 3 | resumes and returns | | mixed / B's value |
+| 4 | prints `"-1.20"` on the UART | | **A sent the wrong value** |
+
+> [!TIP]
+> **Fix — let the caller provide the storage.**
+> ```c
+> char *temp_to_str_r(int16_t centi, char *buf, size_t len)   /* _r = reentrant */
+> {
+>     snprintf(buf, len, "%d.%02d", centi / 100, abs(centi % 100));
+>     return buf;
+> }
+> ```
+> Each call brings its own buffer; no shared state remains. That is exactly the difference between `strtok` and `strtok_r`. If shared state is unavoidable (a counter), protect it with a critical section or a mutex — the function is then *thread-safe*, not reentrant.
+
+| Term | Meaning |
+|---|---|
+| Reentrant | no shared state; safe even from an ISR |
+| Thread-safe | shared state protected by a lock; safe between tasks, usually not from an ISR (a mutex cannot be taken in an ISR) |
+
+More in [RTOS & Concurrency](02-rtos-and-concurrency.md#reentrancy).
+
+---
+
+## extern and linkage
+
+`extern` **declares** that a variable is defined in another file; it allocates no memory. The definition exists in exactly one place.
+
+```c
+/* config.h */
+extern uint32_t system_clock_hz;      /* declaration */
+
+/* config.c */
+#include "config.h"                   /* lets the compiler check that both agree */
+uint32_t system_clock_hz = 72000000;  /* definition — memory is allocated here */
+```
+
+Where possible I prefer a getter function over an `extern` global; encapsulation stays intact.
+
+### Internal vs external linkage
+
+**Linkage** decides whether a name in one file (translation unit) can be bound to the same object from *another* file. The linker does the binding.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="../assets/diagrams/linkage-dark.svg">
+    <img src="../assets/diagrams/linkage.svg" alt="Internal and external linkage" width="680">
+  </picture>
+</p>
+
+| | External linkage | Internal linkage | No linkage |
+|---|---|---|---|
+| How you get it | file-scope global without `static`; functions by default | file-scope `static` | locals inside a function (`static` or not) |
+| Name visible in | the whole program | that `.c` file only | that block only |
+| Reachable with `extern` | ✓ | ✗ | ✗ |
+| Same name in two files | **multiple definition** link error | fine — two separate variables | fine |
+
+> [!TIP]
+> **`static` does two different things.** At file scope it changes **linkage** (external → internal). Inside a function it changes **lifetime** (from the stack to `.bss/.data`, alive for the whole program). Both put the variable in `.bss/.data`; what differs is who can see its name.
+
+### Can a `static` variable be used through `extern`?
+
+**No.** `extern` tells the linker "find this name in another file"; the name of a `static` variable is never exported to the linker (it stays a *local* symbol in the `.o`).
+
+```c
+/* uart.c */  static uint8_t s_buf[64];
+/* main.c */  extern uint8_t s_buf[];      /* compiles...                              */
+              s_buf[0] = 1;                /* ...link error: undefined reference to `s_buf' */
+```
+
+> [!WARNING]
+> **The nastier case.** If another file has a **non-static** variable with the same name, the linker reports nothing and binds the `extern` to *that* one. It builds and writes to the wrong memory. Include the header with the `extern` declaration in the defining `.c` file, so the compiler catches any mismatch.
+
+### Can its address be used from elsewhere?
+
+**Yes.** `static` hides the **name**, not the **memory**. The variable lives at the same address for the whole program; if a function hands out the address, it can be used from anywhere.
+
+```c
+/* uart.c */
+static uint8_t s_buf[64];
+const uint8_t *uart_rx_buffer(void) { return s_buf; }     /* the address leaves the module */
+
+/* the address of a function-local static can be returned safely too */
+uint32_t *tick_counter(void) { static uint32_t ticks; return &ticks; }
+```
+
+| | Address of a local (automatic) variable | Address of a `static` variable |
+|---|---|---|
+| Returning it from a function | ✗ dangling pointer — the stack frame is gone | ✓ valid for the whole program |
+| Using it from another file | ✗ | ✓ as long as you hold the pointer |
+
+> [!WARNING]
+> **Handing out the address ends encapsulation.** Anyone holding the pointer can write the variable, and reentrancy and race problems come back. Return a `const` pointer for read-only access; offer getter/setter functions for controlled writes. Handing out an address is legitimate where hardware needs it, e.g. a DMA buffer.
+
+### Definitions in headers
+
+```c
+/* config.h — WRONG */   uint32_t system_clock_hz;          /* a definition in every file that includes it */
+/* config.h — RIGHT */   extern uint32_t system_clock_hz;   /* declaration only */
+```
+
+GCC 10 and later default to `-fno-common`: a definition in a header included by two `.c` files gives a **multiple definition** link error. Older compilers merged them silently.
 
 ---
 
