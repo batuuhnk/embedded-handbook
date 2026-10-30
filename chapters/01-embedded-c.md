@@ -241,6 +241,82 @@ typedef struct {
 
 Knowing this turns into practical memory work. For example, I make a 4 KB lookup table `const` to move it to Flash, and keep large buffers out of task stacks.
 
+### Detecting a stack overflow
+
+**Causes:** deep call chains, **large local arrays**, recursion, `printf`/`sprintf` (~1 KB of stack), nested interrupts (each ISR entry pushes 32+ bytes onto the main stack).
+**Symptoms:** random HardFaults, corrupted globals at the end of `.bss`, `IMPRECISERR`/`STKERR` in CFSR, a nonsense stacked PC. An overflow rarely announces itself; it looks like some other bug.
+
+There are two kinds of stack:
+
+| | Bare-metal / ISR stack (MSP) | RTOS task stacks (PSP) |
+|---|---|---|
+| Where | top of RAM, grows down from `_estack` | one array per task: in `.bss` (static) or the RTOS heap |
+| Size set by | linker script: `_Min_Stack_Size` | task creation: `stack_size` / `usStackDepth` |
+| Used by | `main()` before the scheduler, and **every ISR** | that task's code |
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="../assets/diagrams/stack-layout-dark.svg">
+    <img src="../assets/diagrams/stack-layout.svg" alt="RAM layout and the direction of a stack overflow" width="680">
+  </picture>
+</p>
+
+**What the `.map` file tells you.** Not the usage (that only exists at run time), but the **boundaries** — where the stack ends and what it hits when it overflows:
+
+```text
+.bss            0x20000400     0x1a40
+                0x20001e40                _ebss = .
+._user_heap_stack
+                0x20001e40      0x600
+                0x20001e40                PROVIDE (end = .)
+                0x20002040                . = (. + _Min_Heap_Size)      /* 0x200 */
+                0x20002440                . = (. + _Min_Stack_Size)     /* 0x400 */
+                0x20008000                _estack = (ORIGIN (RAM) + LENGTH (RAM))
+```
+
+- `._user_heap_stack` is only a **check** that heap + minimum stack fit (`region RAM overflowed` if not). `_Min_Stack_Size` does **not** limit the stack; nothing stops it from growing past that value.
+- `_estack` − (`end` + heap) is the real headroom: here 0x20008000 − 0x20002040 ≈ 24 KB.
+- The last symbols of `.bss`, and the symbol right below each static task-stack array, are the first victims.
+
+**Without writing code**
+
+| Method | How | Shows |
+|---|---|---|
+| Static analysis | `-fstack-usage` (`.su` files; GCC 10+ `-fcallgraph-info=su` for the worst path); STM32CubeIDE: *Window → Show View → Static Stack Analyzer* | frame size per function and the deepest chain, without running |
+| Paint with the debugger | halt at reset, fill the stack area with a pattern from GDB, run, then find the lowest overwritten address in a memory view | the real high-water mark |
+| Watchpoint at the limit | take the limit from the `.map` (or the first word of a task-stack array) and set a write watchpoint there | stops **at the instruction** that overflows |
+| RTOS-aware view | STM32CubeIDE debug: *FreeRTOS Task List* | *Min Free Stack* per task |
+
+```gdb
+(gdb) monitor reset halt
+(gdb) set $p = (uint32_t *)0x20002040          # end + heap, from the .map
+(gdb) while ($p < (uint32_t *)0x20007f00)
+ >set *$p = 0xDEADBEEF
+ >set $p = $p + 1
+ >end
+(gdb) continue                                  # run the heaviest scenario, then interrupt
+(gdb) x/64wx 0x20002040                         # first changed word = deepest point
+(gdb) watch *(uint32_t *)0x20002040             # stop on the instruction that reaches the limit
+```
+
+> [!TIP]
+> **What static analysis misses:** recursion, calls through function pointers and VLAs/`alloca` (marked `dynamic`/`unbounded`). It also does not add nested ISRs: worst case = deepest task chain + the stacks of every ISR that can nest.
+
+**With code — bare-metal and RTOS**
+
+| Method | Catches | Note |
+|---|---|---|
+| Stack painting + high-water mark | afterwards, on periodic reads | best for measuring margin |
+| Canary word at the limit | when checked, late | cheap; damage may already be done |
+| **MPU guard region** (M3/M4/M7) | **immediately** — a 32-byte no-access region at the limit | MemManage fault; stacked PC is the culprit |
+| **MSPLIM / PSPLIM** (ARMv8-M: M23/M33) | **immediately**, in hardware | UsageFault `STKOF` |
+| `configCHECK_FOR_STACK_OVERFLOW 2` (FreeRTOS) | at context switch | SP check + pattern in the last 16 bytes → `vApplicationStackOverflowHook` |
+| `uxTaskGetStackHighWaterMark` / `osThreadGetStackSpace` | on demand | log per task; enlarge any with < 20–25 % left |
+| `-fstack-protector` | at function return | catches buffer overruns *on* the stack, not stack exhaustion |
+
+> [!WARNING]
+> FreeRTOS checks only at a **context switch**. A task that overflows into another task's stack or TCB and crashes before the next switch never reaches the hook, and the ISR stack (MSP) is not checked at all. Reliable detection needs an MPU-based port or PSPLIM on ARMv8-M.
+
 ---
 
 ## Macro vs inline function
